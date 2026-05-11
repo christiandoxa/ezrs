@@ -32,6 +32,12 @@ The repository uses GitHub Actions for `cargo fmt --all --check`, `cargo check -
 
 Publishing runs from the release workflow on GitHub release publication or manual dispatch. Maintainers must configure the repository secret `CARGO_REGISTRY_TOKEN` with a crates.io API token before running the publish workflow.
 
+## Documentation Site
+
+GitHub Pages publishes the documentation site at `https://christiandoxa.github.io/ezrs/`.
+
+The Pages workflow builds Rust API docs with `cargo doc --workspace --no-deps`, renders README and guide pages, and includes source-rendered examples.
+
 ## Quickstart
 
 ```rust

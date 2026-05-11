@@ -24,7 +24,7 @@ struct State {
 async fn main() -> Result<()> {
     App::new()
         .state(State { store: MemoryStore })
-        .command("get", get)
+        .command(get)
         .run()
         .await
 }

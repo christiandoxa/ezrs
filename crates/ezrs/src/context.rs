@@ -12,8 +12,9 @@ use crate::{
     Args, Error, Result,
     fs::Fs,
     log::Logger,
+    process::Process,
     state::TypeStore,
-    task::{Cancellation, TaskManager},
+    task::{Cancellation, TaskGroup, TaskManager},
 };
 
 #[derive(Clone)]
@@ -82,7 +83,7 @@ pub struct Context {
 }
 
 impl Context {
-    pub(crate) fn process(args: Args, state: TypeStore, config: TypeStore) -> Self {
+    pub(crate) fn runtime(args: Args, state: TypeStore, config: TypeStore) -> Self {
         Self::new(args, state, config, Output::process())
     }
 
@@ -206,12 +207,33 @@ impl Context {
         self.inner.fs
     }
 
-    /// Spawns a named background task.
-    pub fn spawn<F>(&self, name: impl Into<String>, future: F)
+    /// Creates a child process builder.
+    pub fn process(&self, program: impl Into<String>) -> Process {
+        Process::new(program)
+    }
+
+    /// Spawns a background task.
+    pub fn spawn<F>(&self, future: F)
     where
         F: Future<Output = Result<()>> + Send + 'static,
     {
-        self.inner.tasks.spawn(name, future);
+        self.inner.tasks.spawn(future);
+    }
+
+    /// Spawns a background task with an explicit name.
+    ///
+    /// Prefer [`Context::spawn`] when Rust syntax is enough. Use this escape hatch
+    /// when logs or diagnostics need a stable external task label.
+    pub fn spawn_named<F>(&self, name: impl Into<String>, future: F)
+    where
+        F: Future<Output = Result<()>> + Send + 'static,
+    {
+        self.inner.tasks.spawn_named(name, future);
+    }
+
+    /// Creates a task group that shares this Context's cancellation handle.
+    pub fn task_group(&self) -> TaskGroup {
+        TaskGroup::with_cancellation(self.inner.cancellation.clone())
     }
 
     /// Joins all tasks spawned through this Context.

@@ -4,7 +4,7 @@ use ezrs::{App, Context, Error, Result};
 
 #[ezrs::main]
 async fn main() -> Result<()> {
-    App::new().command("find", find).run().await
+    App::new().command(find).run().await
 }
 
 async fn find(ctx: Context) -> Result<()> {

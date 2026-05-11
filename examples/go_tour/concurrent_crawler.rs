@@ -17,7 +17,7 @@ async fn main() -> Result<()> {
         .state(State {
             visited: SharedMut::new(HashSet::new()),
         })
-        .command("crawl", crawl)
+        .command(crawl)
         .run()
         .await
 }
@@ -27,7 +27,7 @@ async fn crawl(ctx: Context) -> Result<()> {
     for url in ["/", "/about", "/", "/docs"] {
         let visited = state.visited.clone();
         let output = ctx.clone();
-        ctx.spawn(format!("visit-{url}"), async move {
+        ctx.spawn(async move {
             let inserted = visited.update(|seen| seen.insert(url.to_owned())).await;
             if inserted {
                 output.println(format!("visited {url}"));

@@ -10,7 +10,7 @@ fn sum(values: &[i32]) -> i32 {
 
 #[ezrs::main]
 async fn main() -> Result<()> {
-    App::new().command("list", list).run().await
+    App::new().command(list).run().await
 }
 
 async fn list(ctx: Context) -> Result<()> {

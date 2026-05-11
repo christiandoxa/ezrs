@@ -34,7 +34,7 @@ fn render_report(item: &dyn Reporter) -> String {
 
 #[ezrs::main]
 async fn main() -> Result<()> {
-    App::new().command("methods", methods).run().await
+    App::new().command(methods).run().await
 }
 
 async fn methods(ctx: Context) -> Result<()> {

@@ -14,7 +14,7 @@ async fn fail(_: Context) -> Result<()> {
 #[ezrs::test]
 async fn hello_works() {
     let res = App::new()
-        .command("hello", hello)
+        .command(hello)
         .test()
         .args(["hello", "--name", "Ayu"])
         .run()
@@ -27,7 +27,7 @@ async fn hello_works() {
 #[ezrs::test]
 async fn failure_is_captured() {
     let res = App::new()
-        .command("fail", fail)
+        .command(fail)
         .test()
         .args(["fail"])
         .run()
@@ -38,5 +38,5 @@ async fn failure_is_captured() {
 }
 
 fn main() {
-    let _app = App::new().command("hello", hello).command("fail", fail);
+    let _app = App::new().command(hello).command(fail);
 }

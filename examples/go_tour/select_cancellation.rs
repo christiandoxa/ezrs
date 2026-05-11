@@ -8,12 +8,12 @@ use ezrs::{App, Context, Result};
 
 #[ezrs::main]
 async fn main() -> Result<()> {
-    App::new().command("select", select).run().await
+    App::new().command(select).run().await
 }
 
 async fn select(ctx: Context) -> Result<()> {
     let cancel_ctx = ctx.clone();
-    ctx.spawn("cancel-soon", async move {
+    ctx.spawn(async move {
         tokio::time::sleep(Duration::from_millis(10)).await;
         cancel_ctx.cancel();
         Ok(())

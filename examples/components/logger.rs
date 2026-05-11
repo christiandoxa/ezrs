@@ -4,7 +4,7 @@ use ezrs::{App, Context, Result};
 
 #[ezrs::main]
 async fn main() -> Result<()> {
-    App::new().command("work", work).run().await
+    App::new().command(work).run().await
 }
 
 async fn work(ctx: Context) -> Result<()> {

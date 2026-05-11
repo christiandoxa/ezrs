@@ -12,7 +12,7 @@ mod math_tools {
 
 #[ezrs::main]
 async fn main() -> Result<()> {
-    App::new().command("add", add).run().await
+    App::new().command(add).run().await
 }
 
 async fn add(ctx: Context) -> Result<()> {

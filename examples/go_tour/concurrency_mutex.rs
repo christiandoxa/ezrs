@@ -15,7 +15,7 @@ async fn main() -> Result<()> {
         .state(State {
             counter: SharedMut::new(0),
         })
-        .command("mutex", mutex)
+        .command(mutex)
         .run()
         .await
 }

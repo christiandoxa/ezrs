@@ -8,7 +8,7 @@ use ezrs::{App, Context, Result};
 
 #[ezrs::main]
 async fn main() -> Result<()> {
-    App::new().command("scores", scores).run().await
+    App::new().command(scores).run().await
 }
 
 async fn scores(ctx: Context) -> Result<()> {

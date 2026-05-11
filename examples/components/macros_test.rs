@@ -10,7 +10,7 @@ async fn hello(ctx: Context) -> Result<()> {
 #[ezrs::test]
 async fn command_test_works() {
     let res = App::new()
-        .command("hello", hello)
+        .command(hello)
         .test()
         .args(["hello"])
         .run()
@@ -21,5 +21,5 @@ async fn command_test_works() {
 }
 
 fn main() {
-    let _app = App::new().command("hello", hello);
+    let _app = App::new().command(hello);
 }

@@ -24,7 +24,7 @@ fn parse_name(input: &str) -> ParsedName {
 
 #[ezrs::main]
 async fn main() -> Result<()> {
-    App::new().command("parse", parse).run().await
+    App::new().command(parse).run().await
 }
 
 async fn parse(ctx: Context) -> Result<()> {

@@ -8,7 +8,7 @@ async fn main() -> Result<()> {
         .name("demo")
         .version("0.1.0")
         .about("Small ezrs app")
-        .command("hello", hello)
+        .command(hello)
         .run()
         .await
 }

@@ -50,7 +50,7 @@ fn read_word(mut reader: impl Read) -> Result<String> {
 
 #[ezrs::main]
 async fn main() -> Result<()> {
-    App::new().command("display", display).run().await
+    App::new().command(display).run().await
 }
 
 async fn display(ctx: Context) -> Result<()> {

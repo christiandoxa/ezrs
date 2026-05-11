@@ -12,7 +12,7 @@ struct Config {
 async fn main() -> Result<()> {
     App::new()
         .config::<Config>()
-        .command("run", run)
+        .command(run)
         .run()
         .await
 }

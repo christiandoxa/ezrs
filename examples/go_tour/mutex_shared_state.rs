@@ -15,7 +15,7 @@ async fn main() -> Result<()> {
         .state(State {
             counter: SharedMut::new(0),
         })
-        .command("count", count)
+        .command(count)
         .run()
         .await
 }
@@ -25,7 +25,7 @@ async fn count(ctx: Context) -> Result<()> {
 
     for _ in 0..5 {
         let counter = state.counter.clone();
-        ctx.spawn("increment", async move {
+        ctx.spawn(async move {
             counter.update(|value| *value += 1).await;
             Ok(())
         });

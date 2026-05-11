@@ -9,7 +9,7 @@ async fn hello(ctx: Context) -> Result<()> {
 #[ezrs::test]
 async fn facade_app_test_runs_command() {
     let res = App::new()
-        .command("hello", hello)
+        .command(hello)
         .test()
         .args(["hello", "--name", "Ayu"])
         .run()

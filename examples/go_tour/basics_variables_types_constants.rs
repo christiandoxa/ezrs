@@ -8,7 +8,7 @@ const DEFAULT_WORKERS: usize = 4;
 
 #[ezrs::main]
 async fn main() -> Result<()> {
-    App::new().command("types", types).run().await
+    App::new().command(types).run().await
 }
 
 async fn types(ctx: Context) -> Result<()> {

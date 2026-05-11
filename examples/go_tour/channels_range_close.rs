@@ -7,13 +7,13 @@ use tokio::sync::mpsc;
 
 #[ezrs::main]
 async fn main() -> Result<()> {
-    App::new().command("channel", channel).run().await
+    App::new().command(channel).run().await
 }
 
 async fn channel(ctx: Context) -> Result<()> {
     let (tx, mut rx) = mpsc::channel::<String>(4);
 
-    ctx.spawn("producer", async move {
+    ctx.spawn(async move {
         for item in ["alpha", "beta", "gamma"] {
             tx.send(item.to_owned())
                 .await

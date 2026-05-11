@@ -6,7 +6,7 @@ use ezrs::{App, Context, Result};
 
 #[ezrs::main]
 async fn main() -> Result<()> {
-    App::new().command("range", range).run().await
+    App::new().command(range).run().await
 }
 
 async fn range(ctx: Context) -> Result<()> {

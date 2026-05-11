@@ -7,7 +7,7 @@ use tokio::sync::{Mutex, mpsc};
 
 #[ezrs::main]
 async fn main() -> Result<()> {
-    App::new().command("fan", fan).run().await
+    App::new().command(fan).run().await
 }
 
 async fn fan(ctx: Context) -> Result<()> {
@@ -18,7 +18,7 @@ async fn fan(ctx: Context) -> Result<()> {
     for _ in 0..2 {
         let jobs_rx = Arc::clone(&jobs_rx);
         let results_tx = results_tx.clone();
-        ctx.spawn("fan-worker", async move {
+        ctx.spawn(async move {
             loop {
                 let job = jobs_rx.lock().await.recv().await;
                 let Some(job) = job else { break };

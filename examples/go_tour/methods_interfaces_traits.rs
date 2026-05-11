@@ -24,10 +24,10 @@ fn render(value: &impl Greeter) -> String {
 
 #[ezrs::main]
 async fn main() -> Result<()> {
-    App::new().command("trait", trait_example).run().await
+    App::new().command(r#trait).run().await
 }
 
-async fn trait_example(ctx: Context) -> Result<()> {
+async fn r#trait(ctx: Context) -> Result<()> {
     let user = User {
         name: String::from("Ayu"),
     };

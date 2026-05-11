@@ -6,7 +6,7 @@ use ezrs::{App, Context, Error, Result};
 
 #[ezrs::main]
 async fn main() -> Result<()> {
-    App::new().command("error", error).run().await
+    App::new().command(error).run().await
 }
 
 async fn error(ctx: Context) -> Result<()> {

@@ -49,7 +49,7 @@ fn same(left: &Tree, right: &Tree) -> bool {
 
 #[ezrs::main]
 async fn main() -> Result<()> {
-    App::new().command("trees", trees).run().await
+    App::new().command(trees).run().await
 }
 
 async fn trees(ctx: Context) -> Result<()> {

@@ -20,7 +20,7 @@ struct State<S: Store> {
     store: S,
 }
 
-async fn handler(ctx: Context) -> Result<()> {
+async fn get(ctx: Context) -> Result<()> {
     let state = ctx.state::<State<FakeStore>>()?;
     ctx.println(state.store.get());
     Ok(())
@@ -30,7 +30,7 @@ async fn handler(ctx: Context) -> Result<()> {
 async fn handler_uses_fake_store() {
     let res = App::new()
         .state(State { store: FakeStore })
-        .command("get", handler)
+        .command(get)
         .test()
         .args(["get"])
         .run()
@@ -43,5 +43,5 @@ async fn handler_uses_fake_store() {
 fn main() {
     let _app = App::new()
         .state(State { store: FakeStore })
-        .command("get", handler);
+        .command(get);
 }

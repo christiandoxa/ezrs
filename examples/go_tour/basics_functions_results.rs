@@ -10,7 +10,7 @@ fn split_pair(value: &str) -> (&str, &str) {
 
 #[ezrs::main]
 async fn main() -> Result<()> {
-    App::new().command("split", split).run().await
+    App::new().command(split).run().await
 }
 
 async fn split(ctx: Context) -> Result<()> {

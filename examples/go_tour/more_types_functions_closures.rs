@@ -10,7 +10,7 @@ fn apply(value: i32, f: impl Fn(i32) -> i32) -> i32 {
 
 #[ezrs::main]
 async fn main() -> Result<()> {
-    App::new().command("closure", closure).run().await
+    App::new().command(closure).run().await
 }
 
 async fn closure(ctx: Context) -> Result<()> {

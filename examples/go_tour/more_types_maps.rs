@@ -8,7 +8,7 @@ use ezrs::{App, Context, Result};
 
 #[ezrs::main]
 async fn main() -> Result<()> {
-    App::new().command("map", map).run().await
+    App::new().command(map).run().await
 }
 
 async fn map(ctx: Context) -> Result<()> {

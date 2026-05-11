@@ -13,7 +13,7 @@ async fn main() -> Result<()> {
         .state(State {
             greeting: Shared::new(String::from("hello")),
         })
-        .command("hello", hello)
+        .command(hello)
         .run()
         .await
 }

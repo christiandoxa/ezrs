@@ -7,7 +7,7 @@ use tokio::sync::mpsc;
 
 #[ezrs::main]
 async fn main() -> Result<()> {
-    App::new().command("channel", channel).run().await
+    App::new().command(channel).run().await
 }
 
 async fn channel(ctx: Context) -> Result<()> {

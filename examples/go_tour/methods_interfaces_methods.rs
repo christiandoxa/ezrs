@@ -16,7 +16,7 @@ impl Counter {
 
 #[ezrs::main]
 async fn main() -> Result<()> {
-    App::new().command("method", method).run().await
+    App::new().command(method).run().await
 }
 
 async fn method(ctx: Context) -> Result<()> {

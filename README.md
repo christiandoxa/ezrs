@@ -48,7 +48,7 @@ async fn main() -> Result<()> {
     App::new()
         .name("demo")
         .version("0.1.0")
-        .command("hello", hello)
+        .command(hello)
         .run()
         .await
 }
@@ -64,6 +64,9 @@ Run:
 ```sh
 cargo run -- hello
 ```
+
+`App::command(hello)` derives the CLI command name from Rust syntax. A handler
+named `hello` becomes `hello`, and `commands::scan::run` becomes `scan`.
 
 ## CLI Example
 
@@ -85,7 +88,7 @@ cargo run -- scan --path src --recursive
 ```rust
 async fn work(ctx: ezrs::Context) -> ezrs::Result<()> {
     let worker_ctx = ctx.clone();
-    ctx.spawn("worker", async move {
+    ctx.spawn(async move {
         worker_ctx.println("background work");
         Ok(())
     });
@@ -184,12 +187,43 @@ async fn copy(ctx: ezrs::Context) -> ezrs::Result<()> {
 }
 ```
 
+## Process Example
+
+```rust
+async fn version(ctx: ezrs::Context) -> ezrs::Result<()> {
+    let output = ctx.process("rustc")
+        .arg("--version")
+        .timeout_secs(5)
+        .capture()
+        .run()
+        .await?;
+
+    ctx.println(output.stdout_lossy().trim());
+    Ok(())
+}
+```
+
+This maps to Go's `exec.CommandContext`: explicit child process setup, timeout,
+captured output, and status propagation.
+
+## Persistence Example
+
+```rust
+async fn save(ctx: ezrs::Context) -> ezrs::Result<()> {
+    let _lock = ctx.fs().try_lock("state.lock")?;
+    ctx.fs().atomic_write_string("state.txt", "ready\n").await?;
+    Ok(())
+}
+```
+
+Use `read_json`, `write_json`, `read_toml`, and `write_toml` for typed local state.
+
 ## Testing Example
 
 ```rust
 #[ezrs::test]
 async fn hello_works() {
-    let app = ezrs::App::new().command("hello", hello);
+    let app = ezrs::App::new().command(hello);
     let res = app.test().args(["hello", "--name", "Ayu"]).run().await;
     res.assert_success();
     res.assert_stdout_contains("Ayu");
@@ -234,15 +268,35 @@ Use `ctx.log().info(...)`, `warn(...)`, and `error(...)`. See `examples/componen
 
 ### Fs
 
-Use `ctx.fs().read_to_string`, `write_string`, `exists`, and `walk`. See `examples/components/fs.rs`.
+Use `ctx.fs().read_to_string`, `write_string`, `exists`, `walk`, atomic writes, lock files, and typed JSON/TOML helpers. See `examples/components/fs.rs` and `examples/components/persistence.rs`.
 
 ### Task
 
-Use `ctx.spawn("name", future)` and `ctx.join_all().await`. See `examples/components/task_spawn.rs`.
+Use `ctx.spawn(future)`, `ctx.join_all().await`, and `TaskGroup` for WaitGroup-style coordination. `spawn_named(...)` exists only as a low-level diagnostic escape hatch. See `examples/components/task_spawn.rs` and `examples/components/task_group.rs`.
 
 ### Cancellation
 
 Use `ctx.is_cancelled()`, `ctx.cancelled().await`, and `ctx.check_cancelled()?`. See `examples/components/cancellation.rs`.
+
+### Process
+
+Use `ctx.process("program")` or `Process::new("program")` for `exec.CommandContext`-style child process execution. See `examples/components/process.rs`.
+
+### Resilience
+
+Use `RetryPolicy`, `retry`, `backoff_delay`, and `timeout` for retry/backoff and timeout loops. See `examples/components/resilience.rs`.
+
+### Diagnostics
+
+Use `DiagnosticRunner`, `Check`, and `DiagnosticReport` for doctor-style commands. See `examples/components/diagnostics.rs`.
+
+### Reporting
+
+Use `Report` and `Table` for plain CLI reports and simple JSON rendering. See `examples/components/reporting.rs`.
+
+### Secrets
+
+Use `SecretString` for redacted log-safe secret values with explicit exposure. See `examples/components/secrets.rs`.
 
 ### Test harness
 
@@ -267,6 +321,10 @@ ezrs translates Go application patterns into Rust. It does not copy Go syntax.
 - `sync.Mutex` app state maps to `SharedMut<T>`.
 - goroutines map to `ctx.spawn`.
 - WaitGroup-style coordination maps to `ctx.join_all`.
+- `exec.CommandContext` maps to `ctx.process("program")`.
+- temp-file rename and lock-file persistence map to `ctx.fs().atomic_write_string` and `ctx.fs().try_lock`.
+- doctor commands map to `DiagnosticRunner`.
+- redacted secrets map to `SecretString`.
 - channels and select map to `tokio::sync::mpsc` and `tokio::select!`.
 - table-driven tests map to normal Rust test loops plus `#[ezrs::test]`.
 
@@ -280,7 +338,7 @@ The guide covers the Go Tour topic families: basics, flow control, more types, m
 
 ## Golang Pattern Mapping Summary
 
-ezrs directly supports app entrypoints, error-returning commands, context-style handlers, dynamic flags, config structs, env access, state, logging, file helpers, cancellation, task spawning, task joining, and in-memory command testing.
+ezrs directly supports app entrypoints, error-returning commands, context-style handlers, dynamic flags, config structs, env access, state, logging, file helpers, atomic persistence, process management, cancellation, task spawning, task groups, task joining, retry/backoff, diagnostics, reporting, redacted secrets, and in-memory command testing.
 
 Idiomatic Rust examples cover traits as interfaces, RAII cleanup, channels, worker pools, pipelines, fan-out/fan-in, retry loops, tickers, table-driven tests, fake implementations, and service/repository layering.
 

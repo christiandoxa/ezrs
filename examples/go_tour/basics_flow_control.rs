@@ -14,7 +14,7 @@ impl Drop for Cleanup {
 
 #[ezrs::main]
 async fn main() -> Result<()> {
-    App::new().command("flow", flow).run().await
+    App::new().command(flow).run().await
 }
 
 async fn flow(ctx: Context) -> Result<()> {

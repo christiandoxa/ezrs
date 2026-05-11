@@ -68,7 +68,7 @@ async fn main() -> Result<()> {
         .about("Generated ezrs application")
         .config::<Config>()
         .state(State::new("__EZRS_NAME__"))
-        .command("hello", commands::hello::run)
+        .command(commands::hello::run)
         .run()
         .await
 }

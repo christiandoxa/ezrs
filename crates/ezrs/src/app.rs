@@ -23,7 +23,9 @@ pub struct App {
     version: Option<String>,
     about: Option<String>,
     commands: HashMap<String, Command>,
+    groups: HashMap<String, CommandGroup>,
     default_command: Option<CommandHandler>,
+    registration_errors: Vec<String>,
     state: TypeStore,
     config_loaders: Vec<ConfigLoader>,
 }
@@ -78,14 +80,44 @@ impl App {
         self
     }
 
-    /// Registers a named async command.
-    pub fn command<F, Fut>(mut self, name: impl Into<String>, handler: F) -> Self
+    /// Registers an async command and derives its CLI name from the handler function.
+    ///
+    /// Function `scan` becomes command `scan`. Module handlers named `run`, such as
+    /// `commands::scan::run`, become command `scan`.
+    pub fn command<F, Fut>(mut self, handler: F) -> Self
     where
         F: Fn(Context) -> Fut + Send + Sync + 'static,
         Fut: Future<Output = Result<()>> + Send + 'static,
     {
-        let command = Command::new(name, handler);
-        self.commands.insert(command.name.clone(), command);
+        let command = Command::from_handler(handler);
+        self.insert_command(command);
+        self
+    }
+
+    /// Registers an async command with an explicit name.
+    ///
+    /// Prefer [`App::command`] with a function item when Rust syntax can express the
+    /// command identity directly. Use this escape hatch for closures, aliases, and
+    /// compatibility with dynamic command tables.
+    pub fn command_named<F, Fut>(mut self, name: impl Into<String>, handler: F) -> Self
+    where
+        F: Fn(Context) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Result<()>> + Send + 'static,
+    {
+        let command = Command::named(name, handler);
+        self.insert_command(command);
+        self
+    }
+
+    /// Registers a nested command group.
+    pub fn group(mut self, group: CommandGroup) -> Self {
+        if self.commands.contains_key(&group.name) || self.groups.contains_key(&group.name) {
+            self.registration_errors
+                .push(format!("duplicate command group '{}'", group.name));
+            return self;
+        }
+
+        self.groups.insert(group.name.clone(), group);
         self
     }
 
@@ -126,7 +158,7 @@ impl App {
         let selection = self.select(&tokens);
 
         if selection.help {
-            let output = self.help_text(selection.command.as_deref());
+            let output = self.help_text(selection.group.as_deref(), selection.command.as_deref());
             println_to_process(&output);
             return Ok(());
         }
@@ -137,11 +169,13 @@ impl App {
             return Ok(());
         }
 
+        self.registration_result()?;
+
         let config = self.load_config()?;
-        let ctx = Context::process(selection.args, self.state.clone(), config);
+        let ctx = Context::runtime(selection.args, self.state.clone(), config);
         ctx.install_ctrl_c();
 
-        let handler = self.handler_for(selection.command.as_deref())?;
+        let handler = self.handler_for(selection.group.as_deref(), selection.command.as_deref())?;
         let result = match handler(ctx.clone()).await {
             Ok(()) => ctx.join_all().await,
             Err(error) => Err(error),
@@ -150,6 +184,32 @@ impl App {
         match result {
             Ok(()) => Ok(()),
             Err(error) => Err(error),
+        }
+    }
+
+    fn insert_command(&mut self, command: Command) {
+        if self.commands.contains_key(&command.name) {
+            self.registration_errors
+                .push(format!("duplicate command '{}'", command.name));
+            return;
+        }
+
+        self.commands.insert(command.name.clone(), command);
+    }
+
+    fn registration_result(&self) -> Result<()> {
+        if let Some(error) = self.registration_errors.first() {
+            Err(Error::invalid_input(error.clone()))
+        } else {
+            for group in self.groups.values() {
+                if let Err(error) = group.registration_result() {
+                    return Err(Error::invalid_input(format!(
+                        "command group '{}': {error}",
+                        group.name
+                    )));
+                }
+            }
+            Ok(())
         }
     }
 
@@ -163,7 +223,18 @@ impl App {
         Ok(store)
     }
 
-    fn handler_for(&self, command: Option<&str>) -> Result<CommandHandler> {
+    fn handler_for(&self, group: Option<&str>, command: Option<&str>) -> Result<CommandHandler> {
+        if let Some(group) = group {
+            let group = self
+                .groups
+                .get(group)
+                .ok_or_else(|| Error::invalid_input(format!("unknown command group '{group}'")))?;
+            let command = command.ok_or_else(|| {
+                Error::invalid_input(format!("no command provided for group '{}'", group.name))
+            })?;
+            return group.handler_for(command);
+        }
+
         if let Some(command) = command {
             return self
                 .commands
@@ -179,6 +250,7 @@ impl App {
     }
 
     fn select(&self, tokens: &[String]) -> Selection {
+        let mut group = None;
         let mut command = None;
         let mut start = 0_usize;
         let mut help = false;
@@ -191,13 +263,24 @@ impl App {
             } else if first == "--version" || first == "-V" {
                 version = true;
                 start = 1;
+            } else if !first.starts_with('-') && self.groups.contains_key(first) {
+                group = Some(first.clone());
+                start = 1;
+                if let Some(second) = tokens.get(1)
+                    && !second.starts_with('-')
+                {
+                    command = Some(second.clone());
+                    start = 2;
+                }
             } else if !first.starts_with('-')
                 && (self.commands.contains_key(first) || self.default_command.is_none())
             {
                 command = Some(first.clone());
                 start = 1;
             }
-        } else if self.default_command.is_none() && !self.commands.is_empty() {
+        } else if self.default_command.is_none()
+            && (!self.commands.is_empty() || !self.groups.is_empty())
+        {
             help = true;
         }
 
@@ -213,6 +296,7 @@ impl App {
         }
 
         Selection {
+            group,
             command,
             args: Args::parse(&remaining),
             help,
@@ -220,7 +304,7 @@ impl App {
         }
     }
 
-    fn help_text(&self, command: Option<&str>) -> String {
+    fn help_text(&self, group: Option<&str>, command: Option<&str>) -> String {
         let name = self.name.as_deref().unwrap_or("ezrs-app");
         let mut lines = Vec::new();
         lines.push(format!("Usage: {name} [COMMAND] [ARGS]"));
@@ -228,6 +312,23 @@ impl App {
         if let Some(about) = &self.about {
             lines.push(String::new());
             lines.push(about.clone());
+        }
+
+        if let Some(group) = group {
+            lines.push(String::new());
+            lines.push(format!("Command group: {group}"));
+
+            if let Some(group) = self.groups.get(group)
+                && !group.commands.is_empty()
+            {
+                lines.push(String::new());
+                lines.push(String::from("Group commands:"));
+                let mut names = group.commands.keys().cloned().collect::<Vec<_>>();
+                names.sort();
+                for name in names {
+                    lines.push(format!("  {name}"));
+                }
+            }
         }
 
         if let Some(command) = command {
@@ -239,6 +340,16 @@ impl App {
             lines.push(String::new());
             lines.push(String::from("Commands:"));
             let mut names = self.commands.keys().cloned().collect::<Vec<_>>();
+            names.sort();
+            for name in names {
+                lines.push(format!("  {name}"));
+            }
+        }
+
+        if !self.groups.is_empty() {
+            lines.push(String::new());
+            lines.push(String::from("Command groups:"));
+            let mut names = self.groups.keys().cloned().collect::<Vec<_>>();
             names.sort();
             for name in names {
                 lines.push(format!("  {name}"));
@@ -262,10 +373,81 @@ fn println_to_process(message: &str) {
 }
 
 struct Selection {
+    group: Option<String>,
     command: Option<String>,
     args: Args,
     help: bool,
     version: bool,
+}
+
+/// Nested command group for command trees.
+#[derive(Clone, Default)]
+pub struct CommandGroup {
+    name: String,
+    commands: HashMap<String, Command>,
+    registration_errors: Vec<String>,
+}
+
+impl CommandGroup {
+    /// Creates a command group from macro-provided Rust syntax.
+    #[doc(hidden)]
+    pub fn __from_static(name: &'static str) -> Self {
+        Self {
+            name: name.trim_start_matches("r#").to_string(),
+            commands: HashMap::new(),
+            registration_errors: Vec::new(),
+        }
+    }
+
+    /// Registers a command inside this group and derives its name from the handler.
+    pub fn command<F, Fut>(mut self, handler: F) -> Self
+    where
+        F: Fn(Context) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Result<()>> + Send + 'static,
+    {
+        self.insert_command(Command::from_handler(handler));
+        self
+    }
+
+    /// Registers a command inside this group with an explicit name.
+    pub fn command_named<F, Fut>(mut self, name: impl Into<String>, handler: F) -> Self
+    where
+        F: Fn(Context) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Result<()>> + Send + 'static,
+    {
+        self.insert_command(Command::named(name, handler));
+        self
+    }
+
+    fn insert_command(&mut self, command: Command) {
+        if self.commands.contains_key(&command.name) {
+            self.registration_errors
+                .push(format!("duplicate command '{}'", command.name));
+            return;
+        }
+
+        self.commands.insert(command.name.clone(), command);
+    }
+
+    fn registration_result(&self) -> Result<()> {
+        if let Some(error) = self.registration_errors.first() {
+            Err(Error::invalid_input(error.clone()))
+        } else {
+            Ok(())
+        }
+    }
+
+    fn handler_for(&self, command: &str) -> Result<CommandHandler> {
+        self.commands
+            .get(command)
+            .map(|entry| Arc::clone(&entry.handler))
+            .ok_or_else(|| {
+                Error::invalid_input(format!(
+                    "unknown command '{command}' in group '{}'",
+                    self.name
+                ))
+            })
+    }
 }
 
 /// In-memory command test runner.
@@ -304,7 +486,7 @@ impl App {
                 .expect("stdout buffer poisoned")
                 .push_str(&format!(
                     "{}\n",
-                    self.help_text(selection.command.as_deref())
+                    self.help_text(selection.group.as_deref(), selection.command.as_deref())
                 ));
             return TestResult::success(stdout, stderr);
         }
@@ -315,6 +497,10 @@ impl App {
                 .expect("stdout buffer poisoned")
                 .push_str(&format!("{}\n", self.version_text()));
             return TestResult::success(stdout, stderr);
+        }
+
+        if let Err(error) = self.registration_result() {
+            return TestResult::failure(stdout, stderr, error);
         }
 
         let config = match self.load_config() {
@@ -329,10 +515,11 @@ impl App {
             stdout.clone(),
             stderr.clone(),
         );
-        let handler = match self.handler_for(selection.command.as_deref()) {
-            Ok(handler) => handler,
-            Err(error) => return TestResult::failure(stdout, stderr, error),
-        };
+        let handler =
+            match self.handler_for(selection.group.as_deref(), selection.command.as_deref()) {
+                Ok(handler) => handler,
+                Err(error) => return TestResult::failure(stdout, stderr, error),
+            };
 
         let result = match handler(ctx.clone()).await {
             Ok(()) => ctx.join_all().await,
@@ -431,6 +618,11 @@ mod tests {
         Err(Error::msg("failed"))
     }
 
+    async fn status(ctx: Context) -> Result<()> {
+        ctx.println("status ok");
+        Ok(())
+    }
+
     #[test]
     fn builder_sets_metadata() {
         let app = App::new().name("demo").version("0.1.0").about("Demo");
@@ -442,7 +634,7 @@ mod tests {
     #[tokio::test]
     async fn command_routing_runs_registered_command() {
         let res = App::new()
-            .command("hello", hello)
+            .command(hello)
             .test()
             .args(["hello", "--name", "Ayu"])
             .run()
@@ -468,7 +660,7 @@ mod tests {
     #[tokio::test]
     async fn unknown_command_fails() {
         let res = App::new()
-            .command("hello", hello)
+            .command(hello)
             .test()
             .args(["missing"])
             .run()
@@ -480,12 +672,7 @@ mod tests {
 
     #[tokio::test]
     async fn captures_stderr_assertion() {
-        let res = App::new()
-            .command("fail", fail)
-            .test()
-            .args(["fail"])
-            .run()
-            .await;
+        let res = App::new().command(fail).test().args(["fail"]).run().await;
 
         res.assert_failure();
         res.assert_stderr_contains("about to fail");
@@ -497,7 +684,7 @@ mod tests {
         let help = App::new()
             .name("demo")
             .version("1.2.3")
-            .command("hello", hello)
+            .command(hello)
             .test()
             .args(["--help"])
             .run()
@@ -508,7 +695,7 @@ mod tests {
         let version = App::new()
             .name("demo")
             .version("1.2.3")
-            .command("hello", hello)
+            .command(hello)
             .test()
             .args(["--version"])
             .run()
@@ -524,7 +711,7 @@ mod tests {
             name: String,
         }
 
-        async fn state_cmd(ctx: Context) -> Result<()> {
+        async fn state(ctx: Context) -> Result<()> {
             let state = ctx.state::<State>()?;
             ctx.println(state.name);
             Ok(())
@@ -534,7 +721,7 @@ mod tests {
             .state(State {
                 name: String::from("demo"),
             })
-            .command("state", state_cmd)
+            .command(state)
             .test()
             .args(["state"])
             .run()
@@ -546,7 +733,7 @@ mod tests {
 
     #[tokio::test]
     async fn dynamic_args_include_flags_values_and_positionals() {
-        async fn args_cmd(ctx: Context) -> Result<()> {
+        async fn args(ctx: Context) -> Result<()> {
             ctx.println(ctx.arg("path")?);
             ctx.println(ctx.arg("0")?);
             ctx.println(ctx.flag("recursive"));
@@ -554,7 +741,7 @@ mod tests {
         }
 
         let res = App::new()
-            .command("args", args_cmd)
+            .command(args)
             .test()
             .args(["args", "--path=src", "input.txt", "--recursive"])
             .run()
@@ -564,5 +751,59 @@ mod tests {
         res.assert_stdout_contains("src");
         res.assert_stdout_contains("input.txt");
         res.assert_stdout_contains("true");
+    }
+
+    #[tokio::test]
+    async fn duplicate_command_registration_fails_clearly() {
+        let res = App::new()
+            .command(hello)
+            .command(hello)
+            .test()
+            .args(["hello"])
+            .run()
+            .await;
+
+        res.assert_failure();
+        res.assert_stderr_contains("duplicate command 'hello'");
+    }
+
+    #[tokio::test]
+    async fn nested_command_group_routes_command() {
+        let res = App::new()
+            .group(crate::command_group!(admin { status }))
+            .test()
+            .args(["admin", "status"])
+            .run()
+            .await;
+
+        res.assert_success();
+        res.assert_stdout_contains("status ok");
+    }
+
+    #[tokio::test]
+    async fn nested_command_group_help_lists_group_commands() {
+        let res = App::new()
+            .group(crate::command_group!(admin { status }))
+            .test()
+            .args(["admin", "--help"])
+            .run()
+            .await;
+
+        res.assert_success();
+        res.assert_stdout_contains("Command group: admin");
+        res.assert_stdout_contains("status");
+    }
+
+    #[tokio::test]
+    async fn nested_command_group_unknown_command_fails() {
+        let res = App::new()
+            .group(crate::command_group!(admin { status }))
+            .test()
+            .args(["admin", "missing"])
+            .run()
+            .await;
+
+        res.assert_failure();
+        res.assert_stderr_contains("unknown command 'missing' in group 'admin'");
     }
 }

@@ -6,12 +6,12 @@ use ezrs::{App, Context, Result};
 
 #[ezrs::main]
 async fn main() -> Result<()> {
-    App::new().command("task", task).run().await
+    App::new().command(task).run().await
 }
 
 async fn task(ctx: Context) -> Result<()> {
     let worker_ctx = ctx.clone();
-    ctx.spawn("worker", async move {
+    ctx.spawn(async move {
         worker_ctx.println("task finished");
         Ok(())
     });

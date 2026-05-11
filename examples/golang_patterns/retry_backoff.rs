@@ -4,7 +4,7 @@ use ezrs::{App, Context, Error, Result};
 
 #[ezrs::main]
 async fn main() -> Result<()> {
-    App::new().command("retry", retry).run().await
+    App::new().command(retry).run().await
 }
 
 async fn retry(ctx: Context) -> Result<()> {

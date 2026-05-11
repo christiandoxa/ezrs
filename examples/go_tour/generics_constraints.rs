@@ -12,7 +12,7 @@ fn join_display<T: Display>(left: T, right: T) -> String {
 
 #[ezrs::main]
 async fn main() -> Result<()> {
-    App::new().command("constraint", constraint).run().await
+    App::new().command(constraint).run().await
 }
 
 async fn constraint(ctx: Context) -> Result<()> {

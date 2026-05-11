@@ -10,7 +10,7 @@ fn first<T: Clone>(items: &[T]) -> Option<T> {
 
 #[ezrs::main]
 async fn main() -> Result<()> {
-    App::new().command("generic", generic).run().await
+    App::new().command(generic).run().await
 }
 
 async fn generic(ctx: Context) -> Result<()> {

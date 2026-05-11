@@ -15,7 +15,7 @@ async fn main() -> Result<()> {
         .state(State {
             cache: SharedMut::new(HashMap::new()),
         })
-        .command("put", put)
+        .command(put)
         .run()
         .await
 }

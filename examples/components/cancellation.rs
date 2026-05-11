@@ -4,12 +4,12 @@ use ezrs::{App, Context, Result};
 
 #[ezrs::main]
 async fn main() -> Result<()> {
-    App::new().command("watch", watch).run().await
+    App::new().command(watch).run().await
 }
 
 async fn watch(ctx: Context) -> Result<()> {
     let stopper = ctx.clone();
-    ctx.spawn("stopper", async move {
+    ctx.spawn(async move {
         stopper.sleep_secs(1).await;
         stopper.cancel();
         Ok(())

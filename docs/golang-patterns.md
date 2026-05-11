@@ -23,7 +23,7 @@ Use `examples/golang_patterns/` for pattern-focused examples. Use `examples/comp
 | 13 | Sentinel error | helper constructors like `Error::not_found(...)` | direct API |
 | 14 | Wrapping error | `Error::msg(format!("load config: {err}"))` | direct API |
 | 15 | `defer` cleanup | RAII and `Drop` | `examples/golang_patterns/cleanup_raii.rs` |
-| 16 | Goroutine | `ctx.spawn("worker", async move { ... })` | `examples/golang_patterns/tasks_goroutines.rs` |
+| 16 | Goroutine | `ctx.spawn(async move { ... })` | `examples/golang_patterns/tasks_goroutines.rs` |
 | 17 | Worker pool | `tokio::sync::mpsc` plus `ctx.spawn` | `examples/golang_patterns/worker_pool.rs` |
 | 18 | Channel communication | `tokio::sync::mpsc` | `examples/golang_patterns/channels.rs` |
 | 19 | Buffered channel | `mpsc::channel(capacity)` | documented Rust pattern |
@@ -32,16 +32,16 @@ Use `examples/golang_patterns/` for pattern-focused examples. Use `examples/comp
 | 22 | `select` | `tokio::select!` | `examples/golang_patterns/select_cancellation.rs` |
 | 23 | Context cancellation | `ctx.cancelled().await` and `ctx.check_cancelled()?` | direct API |
 | 24 | Graceful shutdown | Ctrl+C cancels Context during `App::run()` | `examples/components/cancellation.rs` |
-| 25 | Timeout | `tokio::time::timeout(...)` | documented Rust pattern |
+| 25 | Timeout | `ezrs::timeout(...)` or `tokio::time::timeout(...)` | direct API |
 | 26 | Ticker | `tokio::time::interval(...)` | `examples/golang_patterns/ticker.rs` |
 | 27 | Mutex | `SharedMut<T>` | direct API |
 | 28 | Once initialization | `std::sync::OnceLock` or Tokio once cells | documented Rust pattern |
-| 29 | WaitGroup | `ctx.spawn` plus `ctx.join_all().await` | direct API |
+| 29 | WaitGroup | `ctx.spawn` plus `ctx.join_all().await`, or `TaskGroup` | direct API |
 | 30 | Pipeline | mpsc stages | `examples/golang_patterns/pipeline.rs` |
 | 31 | Fan-out fan-in | mpsc jobs plus results channel | `examples/golang_patterns/fan_out_fan_in.rs` |
 | 32 | Rate limiting | interval or `tokio::sync::Semaphore` | documented Rust pattern |
-| 33 | Retry with backoff | loop over `Result` plus sleep | `examples/golang_patterns/retry_backoff.rs` |
-| 34 | CLI command | `App::command("scan", scan)` | direct API |
+| 33 | Retry with backoff | `RetryPolicy` plus `retry(...)` | `examples/components/resilience.rs` |
+| 34 | CLI command | `App::command(scan)` with command names derived from Rust handler syntax | direct API |
 | 35 | Flags | `ctx.arg_or("path", ".")` and `ctx.flag("recursive")` | `examples/components/args_flags.rs` |
 | 36 | Config struct | `serde::Deserialize` plus `App::config::<T>()` | direct API |
 | 37 | Environment config | `ctx.env("PORT")?` | direct API |
@@ -51,7 +51,7 @@ Use `examples/golang_patterns/` for pattern-focused examples. Use `examples/comp
 | 41 | Fake implementation | fake structs implementing traits | `examples/golang_patterns/fake_implementations.rs` |
 | 42 | Package layout | one published crate plus focused Rust modules | repository layout |
 | 43 | internal package | non-public modules and crate-private visibility | repository layout |
-| 44 | Standard file helpers | `ctx.fs().read_to_string`, `write_string`, `walk` | direct API |
+| 44 | Standard file helpers | `ctx.fs().read_to_string`, `write_string`, `walk`, atomic writes, JSON/TOML, lock files | direct API |
 | 45 | HTTP/service pattern | service layer maps; HTTP framework out of scope | out of scope for v0.1.0 |
 | 46 | Middleware | function composition; middleware framework out of scope | documented only |
 | 47 | Repository/service layering | command -> service -> trait-backed repository | `examples/golang_patterns/service_repository.rs` |
@@ -63,6 +63,25 @@ Use `examples/golang_patterns/` for pattern-focused examples. Use `examples/comp
 | 53 | Simple binary scaffold | `ezrs new myapp` | CLI |
 | 54 | Add command | `ezrs add command scan` | CLI |
 | 55 | Explain compiler error | `ezrs explain --last-error` fixed advice | CLI |
+
+## Prodex-Class Building Blocks Without Domain Coupling
+
+ezrs includes reusable app-infrastructure blocks for larger local automation
+apps without importing any application-specific source code or terminology.
+
+- Go `exec.CommandContext` maps to `ctx.process("program")` or `Process::new("program")` with args, env overlays, stdin, capture, timeout, and status helpers.
+- Go temp-file rename persistence maps to `ctx.fs().atomic_write_string(...)`.
+- Go lock-file style coordination maps to `ctx.fs().try_lock(...)` and RAII drop cleanup.
+- Go JSON/TOML state file patterns map to `ctx.fs().read_json`, `write_json`, `read_toml`, and `write_toml`.
+- Go goroutine groups and `WaitGroup` map to `TaskGroup`.
+- Go retry/backoff loops map to `RetryPolicy` and `retry(...)`.
+- Go timeout contexts map to `ezrs::timeout(...)` for operation-scoped timeouts.
+- Go doctor commands map to `DiagnosticRunner`, `Check`, and `DiagnosticReport`.
+- Go plain CLI status tables map to `Report` and `Table`.
+- Go secret redaction conventions map to `SecretString`.
+
+These are framework building blocks. Domain orchestration, project-specific
+state schemas, process choices, and business logic stay outside ezrs.
 
 ## Notes For Go Developers
 

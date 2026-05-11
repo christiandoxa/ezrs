@@ -26,7 +26,7 @@ mod greetings {
 async fn main() -> Result<()> {
     App::new()
         .name("go-tour-packages")
-        .command("hello", hello)
+        .command(hello)
         .run()
         .await
 }

@@ -7,7 +7,7 @@ use tokio::sync::{Mutex, mpsc};
 
 #[ezrs::main]
 async fn main() -> Result<()> {
-    App::new().command("pool", pool).run().await
+    App::new().command(pool).run().await
 }
 
 async fn pool(ctx: Context) -> Result<()> {
@@ -17,7 +17,7 @@ async fn pool(ctx: Context) -> Result<()> {
     for id in 0..2 {
         let rx = Arc::clone(&rx);
         let worker_ctx = ctx.clone();
-        ctx.spawn(format!("worker-{id}"), async move {
+        ctx.spawn(async move {
             loop {
                 let job = rx.lock().await.recv().await;
                 let Some(job) = job else { break };

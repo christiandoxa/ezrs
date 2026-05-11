@@ -6,7 +6,7 @@ use ezrs::{App, Context, Result};
 
 #[ezrs::main]
 async fn main() -> Result<()> {
-    App::new().command("slice", slice).run().await
+    App::new().command(slice).run().await
 }
 
 async fn slice(ctx: Context) -> Result<()> {

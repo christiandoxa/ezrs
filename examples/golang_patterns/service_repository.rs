@@ -39,7 +39,7 @@ async fn main() -> Result<()> {
                 repo: MemoryRepository,
             },
         })
-        .command("user", user)
+        .command(user)
         .run()
         .await
 }

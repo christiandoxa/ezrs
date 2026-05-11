@@ -15,7 +15,7 @@ fn classify(value: i32) -> &'static str {
 
 #[ezrs::main]
 async fn main() -> Result<()> {
-    App::new().command("flow", flow).run().await
+    App::new().command(flow).run().await
 }
 
 async fn flow(ctx: Context) -> Result<()> {

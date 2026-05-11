@@ -18,7 +18,7 @@ fn counter_from(start: i32) -> impl FnMut() -> i32 {
 
 #[ezrs::main]
 async fn main() -> Result<()> {
-    App::new().command("closures", closures).run().await
+    App::new().command(closures).run().await
 }
 
 async fn closures(ctx: Context) -> Result<()> {

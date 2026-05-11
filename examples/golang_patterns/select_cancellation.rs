@@ -7,10 +7,10 @@ use tokio::sync::mpsc;
 
 #[ezrs::main]
 async fn main() -> Result<()> {
-    App::new().command("select", select_example).run().await
+    App::new().command(select).run().await
 }
 
-async fn select_example(ctx: Context) -> Result<()> {
+async fn select(ctx: Context) -> Result<()> {
     let (_tx, mut rx) = mpsc::channel::<String>(8);
 
     tokio::select! {

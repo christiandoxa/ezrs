@@ -6,7 +6,7 @@ use ezrs::{App, Context, Result};
 
 #[ezrs::main]
 async fn main() -> Result<()> {
-    App::new().command("tick", tick).run().await
+    App::new().command(tick).run().await
 }
 
 async fn tick(ctx: Context) -> Result<()> {

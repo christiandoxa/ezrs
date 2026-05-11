@@ -154,6 +154,7 @@ def page(title: str, body: str, active: str = "") -> str:
         ("README", "readme.html"),
         ("Go Patterns", "golang-patterns.html"),
         ("Go Tour", "go-tour.html"),
+        ("Process", "process-management.html"),
         ("Examples", "examples.html"),
         ("API", "api/ezrs/index.html"),
     ]
@@ -270,7 +271,7 @@ def build_site() -> None:
 async fn main() -> Result&lt;()&gt; {
     App::new()
         .name("demo")
-        .command("hello", hello)
+        .command(hello)
         .run()
         .await
 }
@@ -294,6 +295,12 @@ async fn hello(ctx: Context) -> Result&lt;()&gt; {
         OUT / "go-tour.html",
         "Go Tour Mapping",
         "Go Tour",
+    )
+    render_markdown_file(
+        ROOT / "docs" / "process-management.md",
+        OUT / "process-management.html",
+        "Process Management",
+        "Process",
     )
     build_examples()
     copy_api_docs()

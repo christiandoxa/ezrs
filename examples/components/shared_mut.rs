@@ -13,7 +13,7 @@ async fn main() -> Result<()> {
         .state(State {
             counter: SharedMut::new(0),
         })
-        .command("count", count)
+        .command(count)
         .run()
         .await
 }

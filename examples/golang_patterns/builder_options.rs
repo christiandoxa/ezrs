@@ -8,7 +8,7 @@ async fn main() -> Result<()> {
         .name("builder-demo")
         .version("0.1.0")
         .about("Builder options example")
-        .command("hello", hello)
+        .command(hello)
         .run()
         .await
 }

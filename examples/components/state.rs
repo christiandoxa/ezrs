@@ -13,7 +13,7 @@ async fn main() -> Result<()> {
         .state(State {
             app_name: String::from("demo"),
         })
-        .command("hello", hello)
+        .command(hello)
         .run()
         .await
 }

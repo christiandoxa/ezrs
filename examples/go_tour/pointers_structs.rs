@@ -17,7 +17,7 @@ fn translate(point: &mut Point, dx: i32, dy: i32) {
 
 #[ezrs::main]
 async fn main() -> Result<()> {
-    App::new().command("point", point).run().await
+    App::new().command(point).run().await
 }
 
 async fn point(ctx: Context) -> Result<()> {

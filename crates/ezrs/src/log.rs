@@ -2,8 +2,9 @@
 
 use std::{fmt::Display, sync::Once};
 
-use ezrs_error::Result;
 use tracing_subscriber::{EnvFilter, fmt};
+
+use crate::Result;
 
 static INIT: Once = Once::new();
 

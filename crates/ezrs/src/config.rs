@@ -2,8 +2,9 @@
 
 use std::path::Path;
 
-use ezrs_error::Result;
 use serde::de::DeserializeOwned;
+
+use crate::Result;
 
 /// Loads .env into the process environment when present.
 pub fn load_env() {
@@ -31,14 +32,6 @@ where
     let text = std::fs::read_to_string(path)?;
     let value = toml::from_str(&text)?;
     Ok(Some(value))
-}
-
-/// Loads typed config from ezrs.toml and errors when missing.
-pub fn load_required<T>() -> Result<T>
-where
-    T: DeserializeOwned,
-{
-    load_optional()?.ok_or_else(|| ezrs_error::Error::not_found("ezrs.toml"))
 }
 
 #[cfg(test)]

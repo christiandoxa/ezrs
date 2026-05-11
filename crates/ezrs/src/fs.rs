@@ -2,7 +2,7 @@
 
 use std::path::{Path, PathBuf};
 
-use ezrs_error::Result;
+use crate::Result;
 
 /// File helper handle exposed through Context.
 #[derive(Clone, Copy, Debug, Default)]
@@ -36,7 +36,7 @@ impl Fs {
     pub fn walk(&self, path: impl AsRef<Path>) -> Result<Vec<PathBuf>> {
         let mut paths = Vec::new();
         for entry in walkdir::WalkDir::new(path) {
-            let entry = entry.map_err(|err| ezrs_error::Error::msg(err.to_string()))?;
+            let entry = entry.map_err(|err| crate::Error::msg(err.to_string()))?;
             paths.push(entry.path().to_path_buf());
         }
         Ok(paths)

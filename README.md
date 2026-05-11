@@ -20,10 +20,10 @@ ezrs = "0.1.0"
 serde = { version = "1", features = ["derive"] }
 ```
 
-CLI users install the `ezrs` binary when published:
+CLI users install the `ezrs` binary:
 
 ```sh
-cargo install ezrs-cli
+cargo install ezrs
 ```
 
 ## Quickstart

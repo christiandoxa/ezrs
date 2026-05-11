@@ -1,18 +1,6 @@
 [workspace]
 resolver = "3"
-members = [
-    "crates/ezrs",
-    "crates/ezrs-core",
-    "crates/ezrs-error",
-    "crates/ezrs-shared",
-    "crates/ezrs-config",
-    "crates/ezrs-log",
-    "crates/ezrs-fs",
-    "crates/ezrs-task",
-    "crates/ezrs-test",
-    "crates/ezrs-macros",
-    "crates/ezrs-cli",
-]
+members = ["crates/ezrs"]
 
 [workspace.package]
 edition = "2024"
@@ -27,11 +15,8 @@ readme = "README.md"
 anyhow = "1"
 clap = { version = "4", features = ["derive"] }
 dotenvy = "0.15"
-proc-macro2 = "1"
-quote = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-syn = { version = "2", features = ["full"] }
 tempfile = "3"
 thiserror = "2"
 tokio = { version = "1", features = ["full"] }
@@ -40,14 +25,3 @@ toml = "1"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 walkdir = "2"
-
-ezrs = { version = "0.1.0", path = "crates/ezrs" }
-ezrs-config = { version = "0.1.0", path = "crates/ezrs-config" }
-ezrs-core = { version = "0.1.0", path = "crates/ezrs-core" }
-ezrs-error = { version = "0.1.0", path = "crates/ezrs-error" }
-ezrs-fs = { version = "0.1.0", path = "crates/ezrs-fs" }
-ezrs-log = { version = "0.1.0", path = "crates/ezrs-log" }
-ezrs-macros = { version = "0.1.0", path = "crates/ezrs-macros" }
-ezrs-shared = { version = "0.1.0", path = "crates/ezrs-shared" }
-ezrs-task = { version = "0.1.0", path = "crates/ezrs-task" }
-ezrs-test = { version = "0.1.0", path = "crates/ezrs-test" }

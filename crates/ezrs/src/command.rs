@@ -1,8 +1,6 @@
 use std::{future::Future, pin::Pin, sync::Arc};
 
-use ezrs_error::Result;
-
-use crate::Context;
+use crate::{Context, Result};
 
 pub(crate) type CommandFuture = Pin<Box<dyn Future<Output = Result<()>> + Send + 'static>>;
 pub(crate) type CommandHandler = Arc<dyn Fn(Context) -> CommandFuture + Send + Sync + 'static>;

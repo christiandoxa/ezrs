@@ -5,11 +5,10 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use ezrs_error::{Error, Result};
 use serde::de::DeserializeOwned;
 
 use crate::{
-    Args, Context,
+    Args, Context, Error, Result,
     command::{Command, CommandHandler},
     state::TypeStore,
 };
@@ -68,7 +67,7 @@ impl App {
         T: DeserializeOwned + Clone + Send + Sync + 'static,
     {
         self.config_loaders.push(Arc::new(|| {
-            let value = ezrs_config::load_optional::<T>()?;
+            let value = crate::config::load_optional::<T>()?;
             Ok(value.map(|config| {
                 (
                     TypeId::of::<T>(),
@@ -102,8 +101,8 @@ impl App {
 
     /// Parses process args and runs the selected command.
     pub async fn run(self) -> Result<()> {
-        ezrs_log::init_default()?;
-        ezrs_config::load_env();
+        crate::log::init_default()?;
+        crate::config::load_env();
 
         let tokens = std::env::args().skip(1).collect::<Vec<_>>();
         let outcome = self.run_tokens(tokens).await;
@@ -288,7 +287,7 @@ impl AppTest {
 
     /// Runs the selected command in memory.
     pub async fn run(self) -> TestResult {
-        ezrs_config::load_env();
+        crate::config::load_env();
         self.app.run_test_tokens(self.args).await
     }
 }

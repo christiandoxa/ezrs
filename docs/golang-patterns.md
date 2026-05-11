@@ -49,8 +49,8 @@ Use `examples/golang_patterns/` for pattern-focused examples. Use `examples/comp
 | 39 | Table-driven tests | Rust case structs and loops | `examples/golang_patterns/table_driven_tests.rs` |
 | 40 | Handler testing | `App::test().args([...]).run().await` | direct API |
 | 41 | Fake implementation | fake structs implementing traits | `examples/golang_patterns/fake_implementations.rs` |
-| 42 | Package layout | workspace crates and modules | repository layout |
-| 43 | internal package | non-public modules and non-reexported crates | repository layout |
+| 42 | Package layout | one published crate plus focused Rust modules | repository layout |
+| 43 | internal package | non-public modules and crate-private visibility | repository layout |
 | 44 | Standard file helpers | `ctx.fs().read_to_string`, `write_string`, `walk` | direct API |
 | 45 | HTTP/service pattern | service layer maps; HTTP framework out of scope | out of scope for v0.1.0 |
 | 46 | Middleware | function composition; middleware framework out of scope | documented only |

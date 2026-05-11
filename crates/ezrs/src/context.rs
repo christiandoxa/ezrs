@@ -6,13 +6,15 @@ use std::{
     time::Duration,
 };
 
-use ezrs_error::{Error, Result};
-use ezrs_fs::Fs;
-use ezrs_log::Logger;
-use ezrs_task::{Cancellation, TaskManager};
 use tokio::io::AsyncReadExt;
 
-use crate::{Args, state::TypeStore};
+use crate::{
+    Args, Error, Result,
+    fs::Fs,
+    log::Logger,
+    state::TypeStore,
+    task::{Cancellation, TaskManager},
+};
 
 #[derive(Clone)]
 enum Output {
@@ -110,7 +112,7 @@ impl Context {
     }
 
     pub(crate) fn install_ctrl_c(&self) {
-        ezrs_task::install_ctrl_c(self.inner.cancellation.clone());
+        crate::task::install_ctrl_c(self.inner.cancellation.clone());
     }
 
     /// Reads a required dynamic argument by name or positional index.

@@ -4,7 +4,7 @@ use std::{
     sync::Arc,
 };
 
-use ezrs_error::{Error, Result};
+use crate::{Error, Result};
 
 #[derive(Clone, Default)]
 pub(crate) struct TypeStore {

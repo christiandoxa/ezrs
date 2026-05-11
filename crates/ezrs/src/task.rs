@@ -5,9 +5,10 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use ezrs_error::{Error, Result};
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
+
+use crate::{Error, Result};
 
 type TaskJoin = JoinHandle<(String, Result<()>)>;
 

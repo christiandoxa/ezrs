@@ -157,109 +157,19 @@ dependencies = [
 name = "ezrs"
 version = "0.1.0"
 dependencies = [
- "ezrs-core",
- "ezrs-error",
- "ezrs-macros",
- "ezrs-shared",
- "serde",
- "tokio",
-]
-
-[[package]]
-name = "ezrs-cli"
-version = "0.1.0"
-dependencies = [
- "clap",
- "tempfile",
-]
-
-[[package]]
-name = "ezrs-config"
-version = "0.1.0"
-dependencies = [
- "dotenvy",
- "ezrs-error",
- "serde",
- "tempfile",
- "toml",
-]
-
-[[package]]
-name = "ezrs-core"
-version = "0.1.0"
-dependencies = [
- "ezrs-config",
- "ezrs-error",
- "ezrs-fs",
- "ezrs-log",
- "ezrs-shared",
- "ezrs-task",
- "serde",
- "tempfile",
- "tokio",
-]
-
-[[package]]
-name = "ezrs-error"
-version = "0.1.0"
-dependencies = [
  "anyhow",
+ "clap",
+ "dotenvy",
+ "serde",
  "serde_json",
- "thiserror",
- "toml",
-]
-
-[[package]]
-name = "ezrs-fs"
-version = "0.1.0"
-dependencies = [
- "ezrs-error",
  "tempfile",
- "tokio",
- "walkdir",
-]
-
-[[package]]
-name = "ezrs-log"
-version = "0.1.0"
-dependencies = [
- "ezrs-error",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "ezrs-macros"
-version = "0.1.0"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
-]
-
-[[package]]
-name = "ezrs-shared"
-version = "0.1.0"
-dependencies = [
- "tokio",
-]
-
-[[package]]
-name = "ezrs-task"
-version = "0.1.0"
-dependencies = [
- "ezrs-error",
+ "thiserror",
  "tokio",
  "tokio-util",
+ "toml",
  "tracing",
-]
-
-[[package]]
-name = "ezrs-test"
-version = "0.1.0"
-dependencies = [
- "ezrs-core",
- "ezrs-error",
+ "tracing-subscriber",
+ "walkdir",
 ]
 
 [[package]]

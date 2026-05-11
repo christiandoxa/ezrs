@@ -67,28 +67,24 @@ All code, comments, docs, examples, commit-style notes, and CLI text must be wri
 
 ## Architecture rules
 
-This repository uses a mini-crate architecture.
+This repository publishes one crate: ezrs.
 
-The facade crate is ezrs.
+The crate contains the public library and the `ezrs` CLI binary.
 
-Most users should only depend on ezrs.
+Keep internal modules focused:
 
-Internal crates must stay focused:
+- app and context own App, Context, command routing, output capture, and state.
+- error owns Error and Result.
+- shared owns Shared and SharedMut.
+- config owns config and .env loading.
+- log owns default logging.
+- fs owns file helpers.
+- task owns task spawning and cancellation.
+- bin/ezrs owns the ezrs command line tool.
 
-- ezrs-core owns App, Context, command routing, and state.
-- ezrs-error owns Error and Result.
-- ezrs-shared owns Shared and SharedMut.
-- ezrs-config owns config loading.
-- ezrs-log owns default logging.
-- ezrs-fs owns file helpers.
-- ezrs-task owns task spawning and cancellation.
-- ezrs-test owns the test harness.
-- ezrs-macros owns procedural macros.
-- ezrs-cli owns the ezrs command line tool.
+Do not leak internal module complexity into beginner examples.
 
-Do not leak internal mini-crate complexity into beginner examples.
-
-Do not add new crates unless there is a clear boundary and repeated code pressure.
+Do not add new crates unless publishing multiple crates is intentionally restored.
 
 ## Golang pattern coverage
 
@@ -136,7 +132,7 @@ Add tests for:
 - SharedMut updates
 - cancellation checks where practical
 - test harness assertions
-- ezrs-cli project generation
+- ezrs CLI project generation
 - key Golang pattern examples
 - component examples where practical
 

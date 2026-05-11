@@ -1,0 +1,21 @@
+[package]
+name = "ezrs-core"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+
+[dependencies]
+ezrs-config.workspace = true
+ezrs-error.workspace = true
+ezrs-fs.workspace = true
+ezrs-log.workspace = true
+ezrs-shared.workspace = true
+ezrs-task.workspace = true
+serde.workspace = true
+tokio.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

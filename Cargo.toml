@@ -1,0 +1,52 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/ezrs",
+    "crates/ezrs-core",
+    "crates/ezrs-error",
+    "crates/ezrs-shared",
+    "crates/ezrs-config",
+    "crates/ezrs-log",
+    "crates/ezrs-fs",
+    "crates/ezrs-task",
+    "crates/ezrs-test",
+    "crates/ezrs-macros",
+    "crates/ezrs-cli",
+]
+
+[workspace.package]
+edition = "2024"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/your-org/ezrs"
+homepage = "https://github.com/your-org/ezrs"
+documentation = "https://docs.rs/ezrs"
+readme = "README.md"
+
+[workspace.dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+dotenvy = "0.15"
+proc-macro2 = "1"
+quote = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+syn = { version = "2", features = ["full"] }
+tempfile = "3"
+thiserror = "2"
+tokio = { version = "1", features = ["full"] }
+tokio-util = "0.7"
+toml = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+walkdir = "2"
+
+ezrs = { path = "crates/ezrs" }
+ezrs-config = { path = "crates/ezrs-config" }
+ezrs-core = { path = "crates/ezrs-core" }
+ezrs-error = { path = "crates/ezrs-error" }
+ezrs-fs = { path = "crates/ezrs-fs" }
+ezrs-log = { path = "crates/ezrs-log" }
+ezrs-macros = { path = "crates/ezrs-macros" }
+ezrs-shared = { path = "crates/ezrs-shared" }
+ezrs-task = { path = "crates/ezrs-task" }
+ezrs-test = { path = "crates/ezrs-test" }

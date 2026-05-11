@@ -45,6 +45,7 @@ Allowed:
 - simple Result/Error
 - CLI command system
 - dynamic args and flags
+- typed args without a proc-macro crate
 - state without user-facing Arc
 - Shared and SharedMut
 - simple config
@@ -52,8 +53,11 @@ Allowed:
 - file helpers
 - atomic local persistence
 - child process management
+- lifecycle hooks
 - task spawning
 - task groups
+- channel/select helpers
+- worker pools
 - Ctrl+C cancellation
 - retry/backoff and timeout helpers
 - doctor-style diagnostics
@@ -92,21 +96,21 @@ Future ezrs work should be evaluated as framework building blocks. A block does 
 The desired building block map is:
 
 - App entrypoint and runtime: `#[ezrs::main]`, Tokio setup, shutdown orchestration, app metadata, lifecycle hooks.
-- Command system: command registration, default command, nested commands, passthrough args, typed args when stable, help/version output, shell-friendly errors.
+- Command system: command registration, command aliases, hidden commands, default command, nested commands, passthrough args, typed args, help/version output, shell-friendly errors.
 - Context and capabilities: cheap clone handle for args, env, state, config, logging, fs, cancellation, tasks, output, and future app capabilities.
 - Error model: `Result`, human-readable errors, exit codes, error categories, context wrapping, diagnostic-friendly messages.
 - State and dependencies: explicit state passing, typed lookup, immutable shared state, mutable shared state, fakeable services, trait-backed repositories.
 - Config and environment: config files, `.env`, env access, typed config, simple layering, validation, secrets separation.
 - Logging and tracing: default logger, structured fields, spans, request/task correlation, file logs where needed.
 - Filesystem and persistence: read/write helpers, walk helpers, atomic writes, file locks, backup recovery, JSON/TOML helpers, append-only journals.
-- Task and concurrency: named tasks, joins, cancellation, worker pools, fan-out/fan-in, bounded queues, timeout helpers, select-style examples.
+- Task and concurrency: named tasks, joins, cancellation, channel/select helpers, worker pools, fan-out/fan-in, bounded queues, timeout helpers, select-style examples.
 - Process management: child process spawning, env overlays, stdin/stdout/stderr wiring, exit status propagation, kill-on-drop, PID/lease helpers. Use direct Rust syntax for process specs where possible; avoid placeholder-first APIs.
 - Networking integration: HTTP client examples, local admin HTTP helpers, streaming/SSE/WebSocket examples or adapters, proxy patterns where needed. This must not turn ezrs into a general web framework by accident.
 - Runtime operations: health checks, doctor commands, readiness/liveness reports, runtime registries, local daemon/broker lifecycle helpers.
 - Resilience: retry, backoff, circuit breaker, admission control, rate limiting, overload handling, graceful degradation.
 - Observability: metrics snapshots, Prometheus text rendering, audit events, structured diagnostic reports, redaction-safe output.
 - Security and secrets: redaction helpers, secret locations, token loading, secret-store abstraction, no secret leakage in logs/tests.
-- Testing: command harness, fake dependencies, temp homes, env isolation, fixture loading, replay tests for JSON/SSE/WebSocket-style protocols.
+- Testing: command harness, fake dependencies, temp homes/workspaces, env isolation, fixture loading, golden assertions, fake process runners, replay tests for JSON/SSE/WebSocket-style protocols.
 - Terminal output: plain text reports, tables, panels, optional TUI integration through external crates.
 - Packaging and release: project scaffolding, GitHub Actions, Pages docs, publish workflow, version bump guidance.
 - Documentation and examples: component examples, Go pattern examples, Go Tour mappings, cookbook-style advanced app examples.
@@ -145,6 +149,7 @@ Good core candidates:
 Good optional adapter candidates:
 
 - typed CLI via clap
+- derive-based CLI arguments if ezrs restores a separate proc-macro crate
 - HTTP client/server helpers
 - WebSocket/SSE helpers
 - metrics exporters
@@ -176,6 +181,7 @@ Preferred:
 - `ctx.spawn(worker())` or `ctx.tasks().spawn(worker)` when a function item or task spec carries identity.
 - `ctx.process(cargo()).arg("check").run().await?` when a typed process spec can be expressed directly.
 - `#[derive(ezrs::Args)] struct ScanArgs { path: PathBuf, recursive: bool }` for typed CLI input.
+- `TypedArgs` or `typed_args!` while ezrs remains a single published crate and cannot host derive macros.
 - enum-based command trees for nested commands when using a typed CLI adapter.
 
 Acceptable:
@@ -198,6 +204,7 @@ Compatibility note:
 - Existing v0.1.0 dynamic APIs may remain for simple scripts and Go-style low ceremony.
 - Newer ergonomic APIs should offer syntax-first alternatives.
 - Do not break beginner examples without providing a clearer syntax-first replacement.
+- While ezrs publishes one crate, prefer trait-plus-macro APIs over derive macros that require a proc-macro crate.
 
 ## Prodex-class application support
 

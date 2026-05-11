@@ -72,10 +72,26 @@ named `hello` becomes `hello`, and `commands::scan::run` becomes `scan`.
 
 ```rust
 async fn scan(ctx: ezrs::Context) -> ezrs::Result<()> {
-    let path = ctx.arg_or("path", ".");
-    let recursive = ctx.flag("recursive");
-    ctx.println(format!("scan path={path} recursive={recursive}"));
+    let args = <ScanArgs as ezrs::TypedArgs>::from_context(&ctx)?;
+    ctx.println(format!("scan path={} recursive={}", args.path, args.recursive));
     Ok(())
+}
+
+struct ScanArgs {
+    path: String,
+    recursive: bool,
+}
+
+impl ezrs::TypedArgs for ScanArgs {
+    fn from_source<S>(source: &S) -> ezrs::Result<Self>
+    where
+        S: ezrs::ArgSource + ?Sized,
+    {
+        Ok(Self {
+            path: ezrs::typed_args::string_or(source, "path", "."),
+            recursive: ezrs::typed_args::flag(source, "recursive"),
+        })
+    }
 }
 ```
 
@@ -250,6 +266,10 @@ Use `ezrs::Result<()>`, `?`, and helpers like `Error::invalid_input`. See `examp
 
 Use `ctx.arg("path")?`, `ctx.arg_or("path", ".")`, and `ctx.flag("recursive")`. See `examples/components/args_flags.rs`.
 
+### Typed args
+
+Use `TypedArgs`, `ArgSource`, and typed-args helpers to map dynamic CLI input into a typed struct without repeated string lookups in handler logic. See `examples/components/typed_args.rs` and `docs/typed-args.md`.
+
 ### State
 
 Use `App::state(value)` and `ctx.state::<State>()?` for explicit dependency passing. See `examples/components/state.rs`.
@@ -274,9 +294,17 @@ Use `ctx.fs().read_to_string`, `write_string`, `exists`, `walk`, atomic writes, 
 
 Use `ctx.spawn(future)`, `ctx.join_all().await`, and `TaskGroup` for WaitGroup-style coordination. `spawn_named(...)` exists only as a low-level diagnostic escape hatch. See `examples/components/task_spawn.rs` and `examples/components/task_group.rs`.
 
+### Lifecycle
+
+Use `App::on_start`, `on_ready`, `on_shutdown`, and `shutdown_timeout_secs` for startup/readiness/shutdown hooks. See `examples/components/lifecycle.rs` and `docs/lifecycle.md`.
+
 ### Cancellation
 
-Use `ctx.is_cancelled()`, `ctx.cancelled().await`, and `ctx.check_cancelled()?`. See `examples/components/cancellation.rs`.
+Use `ctx.is_cancelled()`, `ctx.cancelled().await`, `ctx.check_cancelled()?`, `ctx.with_timeout(...)`, and `ctx.with_deadline(...)`. See `examples/components/cancellation.rs`.
+
+### Channels and Worker Pools
+
+Use `channel`, `select_recv2`, `recv_or_cancel`, and `WorkerPool` for Go-style channels, select, and worker pools. See `examples/components/channels.rs`, `examples/components/worker_pool.rs`, and `docs/cookbook.md`.
 
 ### Process
 
@@ -300,7 +328,7 @@ Use `SecretString` for redacted log-safe secret values with explicit exposure. S
 
 ### Test harness
 
-Use `App::test()` for in-memory command tests. See `examples/components/test_harness.rs`.
+Use `App::test()` for in-memory command tests. Use `test_support` for temp workspaces, owned env maps, golden output, and fake process runners. See `examples/components/test_harness.rs`, `examples/components/test_support.rs`, and `docs/testing.md`.
 
 ### Macros
 
@@ -321,8 +349,11 @@ ezrs translates Go application patterns into Rust. It does not copy Go syntax.
 - `sync.Mutex` app state maps to `SharedMut<T>`.
 - goroutines map to `ctx.spawn`.
 - WaitGroup-style coordination maps to `ctx.join_all`.
+- `context.WithTimeout` maps to `ctx.with_timeout(...)`.
 - `exec.CommandContext` maps to `ctx.process("program")`.
 - temp-file rename and lock-file persistence map to `ctx.fs().atomic_write_string` and `ctx.fs().try_lock`.
+- lifecycle hooks map to `App::on_start`, `on_ready`, and `on_shutdown`.
+- worker pools map to `WorkerPool`.
 - doctor commands map to `DiagnosticRunner`.
 - redacted secrets map to `SecretString`.
 - channels and select map to `tokio::sync::mpsc` and `tokio::select!`.
@@ -338,7 +369,7 @@ The guide covers the Go Tour topic families: basics, flow control, more types, m
 
 ## Golang Pattern Mapping Summary
 
-ezrs directly supports app entrypoints, error-returning commands, context-style handlers, dynamic flags, config structs, env access, state, logging, file helpers, atomic persistence, process management, cancellation, task spawning, task groups, task joining, retry/backoff, diagnostics, reporting, redacted secrets, and in-memory command testing.
+ezrs directly supports app entrypoints, error-returning commands, context-style handlers, dynamic and typed flags, config structs, env access, state, logging, file helpers, atomic persistence, process management, lifecycle hooks, cancellation, timeout contexts, channels, worker pools, task spawning, task groups, task joining, retry/backoff, diagnostics, reporting, redacted secrets, fake process tests, and in-memory command testing.
 
 Idiomatic Rust examples cover traits as interfaces, RAII cleanup, channels, worker pools, pipelines, fan-out/fan-in, retry loops, tickers, table-driven tests, fake implementations, and service/repository layering.
 

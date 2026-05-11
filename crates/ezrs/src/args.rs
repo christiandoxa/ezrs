@@ -1,4 +1,9 @@
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    str::FromStr,
+};
+
+use crate::{Error, Result};
 
 /// Dynamic command arguments exposed through Context.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -73,6 +78,32 @@ impl Args {
         self.values.get(key).map(String::as_str)
     }
 
+    /// Parses a named or positional argument into a typed value.
+    pub fn parse_value<T>(&self, key: &str) -> Result<T>
+    where
+        T: FromStr,
+        T::Err: std::fmt::Display,
+    {
+        self.get(key)
+            .ok_or_else(|| Error::not_found(format!("argument '{key}'")))?
+            .parse::<T>()
+            .map_err(|err| Error::invalid_input(format!("argument '{key}': {err}")))
+    }
+
+    /// Parses a named or positional argument, returning a default when missing.
+    pub fn parse_or<T>(&self, key: &str, default: T) -> Result<T>
+    where
+        T: FromStr,
+        T::Err: std::fmt::Display,
+    {
+        match self.get(key) {
+            Some(value) => value
+                .parse::<T>()
+                .map_err(|err| Error::invalid_input(format!("argument '{key}': {err}"))),
+            None => Ok(default),
+        }
+    }
+
     /// Returns a named argument or default value.
     pub fn get_or<'a>(&'a self, key: &str, default: &'a str) -> &'a str {
         self.get(key).unwrap_or(default)
@@ -86,6 +117,23 @@ impl Args {
     /// Returns positional arguments in encounter order.
     pub fn positionals(&self) -> &[String] {
         &self.positionals
+    }
+
+    /// Returns a positional argument by numeric index.
+    pub fn positional(&self, index: usize) -> Option<&str> {
+        self.positionals.get(index).map(String::as_str)
+    }
+
+    /// Parses a positional argument by numeric index.
+    pub fn parse_positional<T>(&self, index: usize) -> Result<T>
+    where
+        T: FromStr,
+        T::Err: std::fmt::Display,
+    {
+        self.positional(index)
+            .ok_or_else(|| Error::not_found(format!("positional argument {index}")))?
+            .parse::<T>()
+            .map_err(|err| Error::invalid_input(format!("positional argument {index}: {err}")))
     }
 }
 
@@ -122,5 +170,15 @@ mod tests {
         assert_eq!(args.get("0"), Some("input.txt"));
         assert_eq!(args.get("1"), Some("out.txt"));
         assert_eq!(args.positionals(), &["input.txt", "out.txt"]);
+        assert_eq!(args.positional(0), Some("input.txt"));
+    }
+
+    #[test]
+    fn parses_typed_values() {
+        let args = parse(&["--limit", "5", "42"]);
+
+        assert_eq!(args.parse_value::<usize>("limit").expect("limit"), 5);
+        assert_eq!(args.parse_or::<usize>("missing", 7).expect("default"), 7);
+        assert_eq!(args.parse_positional::<u64>(0).expect("positional"), 42);
     }
 }

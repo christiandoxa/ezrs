@@ -10,6 +10,7 @@ use serde::de::DeserializeOwned;
 use crate::{
     Args, Context, Error, Result,
     command::{Command, CommandHandler},
+    lifecycle::Lifecycle,
     state::TypeStore,
 };
 
@@ -28,6 +29,7 @@ pub struct App {
     registration_errors: Vec<String>,
     state: TypeStore,
     config_loaders: Vec<ConfigLoader>,
+    lifecycle: Lifecycle,
 }
 
 impl App {
@@ -109,6 +111,39 @@ impl App {
         self
     }
 
+    /// Registers an async command with an additional CLI alias.
+    pub fn command_alias<F, Fut>(mut self, alias: impl Into<String>, handler: F) -> Self
+    where
+        F: Fn(Context) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Result<()>> + Send + 'static,
+    {
+        let command = Command::from_handler(handler).alias(alias);
+        self.insert_command(command);
+        self
+    }
+
+    /// Registers a command that is routable but omitted from help output.
+    pub fn hidden_command<F, Fut>(mut self, handler: F) -> Self
+    where
+        F: Fn(Context) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Result<()>> + Send + 'static,
+    {
+        let command = Command::from_handler(handler).hidden();
+        self.insert_command(command);
+        self
+    }
+
+    /// Registers a command with short help text.
+    pub fn command_about<F, Fut>(mut self, about: impl Into<String>, handler: F) -> Self
+    where
+        F: Fn(Context) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Result<()>> + Send + 'static,
+    {
+        let command = Command::from_handler(handler).about(about);
+        self.insert_command(command);
+        self
+    }
+
     /// Registers a nested command group.
     pub fn group(mut self, group: CommandGroup) -> Self {
         if self.commands.contains_key(&group.name) || self.groups.contains_key(&group.name) {
@@ -128,6 +163,48 @@ impl App {
         Fut: Future<Output = Result<()>> + Send + 'static,
     {
         self.default_command = Some(Arc::new(move |ctx| Box::pin(handler(ctx))));
+        self
+    }
+
+    /// Registers lifecycle hooks for startup, readiness, and shutdown.
+    pub fn lifecycle(mut self, lifecycle: Lifecycle) -> Self {
+        self.lifecycle = lifecycle;
+        self
+    }
+
+    /// Registers a startup lifecycle hook.
+    pub fn on_start<F, Fut>(mut self, handler: F) -> Self
+    where
+        F: Fn(Context) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Result<()>> + Send + 'static,
+    {
+        self.lifecycle = self.lifecycle.on_start(handler);
+        self
+    }
+
+    /// Registers a readiness lifecycle hook.
+    pub fn on_ready<F, Fut>(mut self, handler: F) -> Self
+    where
+        F: Fn(Context) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Result<()>> + Send + 'static,
+    {
+        self.lifecycle = self.lifecycle.on_ready(handler);
+        self
+    }
+
+    /// Registers a shutdown lifecycle hook.
+    pub fn on_shutdown<F, Fut>(mut self, handler: F) -> Self
+    where
+        F: Fn(Context) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Result<()>> + Send + 'static,
+    {
+        self.lifecycle = self.lifecycle.on_shutdown(handler);
+        self
+    }
+
+    /// Sets the shutdown timeout for lifecycle hooks.
+    pub fn shutdown_timeout_secs(mut self, seconds: u64) -> Self {
+        self.lifecycle = self.lifecycle.shutdown_timeout_secs(seconds);
         self
     }
 
@@ -175,26 +252,45 @@ impl App {
         let ctx = Context::runtime(selection.args, self.state.clone(), config);
         ctx.install_ctrl_c();
 
+        self.lifecycle.run_start(ctx.clone()).await?;
+        self.lifecycle.run_ready(ctx.clone()).await?;
+
         let handler = self.handler_for(selection.group.as_deref(), selection.command.as_deref())?;
-        let result = match handler(ctx.clone()).await {
+        let command_result = match handler(ctx.clone()).await {
             Ok(()) => ctx.join_all().await,
             Err(error) => Err(error),
         };
 
-        match result {
-            Ok(()) => Ok(()),
-            Err(error) => Err(error),
+        let shutdown_result = self.lifecycle.run_shutdown(ctx.clone()).await;
+
+        match (command_result, shutdown_result) {
+            (Err(command_error), _) => Err(command_error),
+            (Ok(()), Err(shutdown_error)) => Err(shutdown_error),
+            (Ok(()), Ok(())) => Ok(()),
         }
     }
 
     fn insert_command(&mut self, command: Command) {
-        if self.commands.contains_key(&command.name) {
+        if self.command_name_taken(&command.name)
+            || command
+                .aliases
+                .iter()
+                .any(|alias| self.command_name_taken(alias))
+        {
             self.registration_errors
                 .push(format!("duplicate command '{}'", command.name));
             return;
         }
 
         self.commands.insert(command.name.clone(), command);
+    }
+
+    fn command_name_taken(&self, name: &str) -> bool {
+        self.commands.contains_key(name)
+            || self
+                .commands
+                .values()
+                .any(|command| command.aliases.iter().any(|alias| alias == name))
     }
 
     fn registration_result(&self) -> Result<()> {
@@ -237,8 +333,7 @@ impl App {
 
         if let Some(command) = command {
             return self
-                .commands
-                .get(command)
+                .find_command(command)
                 .map(|entry| Arc::clone(&entry.handler))
                 .ok_or_else(|| Error::invalid_input(format!("unknown command '{command}'")));
         }
@@ -273,7 +368,7 @@ impl App {
                     start = 2;
                 }
             } else if !first.starts_with('-')
-                && (self.commands.contains_key(first) || self.default_command.is_none())
+                && (self.find_command(first).is_some() || self.default_command.is_none())
             {
                 command = Some(first.clone());
                 start = 1;
@@ -326,7 +421,11 @@ impl App {
                 let mut names = group.commands.keys().cloned().collect::<Vec<_>>();
                 names.sort();
                 for name in names {
-                    lines.push(format!("  {name}"));
+                    if let Some(command) = group.commands.get(&name)
+                        && !command.hidden
+                    {
+                        lines.push(format_command_help(command));
+                    }
                 }
             }
         }
@@ -342,7 +441,11 @@ impl App {
             let mut names = self.commands.keys().cloned().collect::<Vec<_>>();
             names.sort();
             for name in names {
-                lines.push(format!("  {name}"));
+                if let Some(command) = self.commands.get(&name)
+                    && !command.hidden
+                {
+                    lines.push(format_command_help(command));
+                }
             }
         }
 
@@ -364,6 +467,25 @@ impl App {
         let version = self.version.as_deref().unwrap_or("0.1.0");
         format!("{name} {version}")
     }
+
+    fn find_command(&self, name: &str) -> Option<&Command> {
+        self.commands.get(name).or_else(|| {
+            self.commands
+                .values()
+                .find(|command| command.aliases.iter().any(|alias| alias == name))
+        })
+    }
+}
+
+fn format_command_help(command: &Command) -> String {
+    let mut line = format!("  {}", command.name);
+    if !command.aliases.is_empty() {
+        line.push_str(&format!(" (aliases: {})", command.aliases.join(", ")));
+    }
+    if let Some(about) = &command.about {
+        line.push_str(&format!(" - {about}"));
+    }
+    line
 }
 
 fn println_to_process(message: &str) {
@@ -419,14 +541,57 @@ impl CommandGroup {
         self
     }
 
+    /// Registers a command inside this group with an additional CLI alias.
+    pub fn command_alias<F, Fut>(mut self, alias: impl Into<String>, handler: F) -> Self
+    where
+        F: Fn(Context) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Result<()>> + Send + 'static,
+    {
+        self.insert_command(Command::from_handler(handler).alias(alias));
+        self
+    }
+
+    /// Registers a hidden command inside this group.
+    pub fn hidden_command<F, Fut>(mut self, handler: F) -> Self
+    where
+        F: Fn(Context) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Result<()>> + Send + 'static,
+    {
+        self.insert_command(Command::from_handler(handler).hidden());
+        self
+    }
+
+    /// Registers a command inside this group with short help text.
+    pub fn command_about<F, Fut>(mut self, about: impl Into<String>, handler: F) -> Self
+    where
+        F: Fn(Context) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Result<()>> + Send + 'static,
+    {
+        self.insert_command(Command::from_handler(handler).about(about));
+        self
+    }
+
     fn insert_command(&mut self, command: Command) {
-        if self.commands.contains_key(&command.name) {
+        if self.command_name_taken(&command.name)
+            || command
+                .aliases
+                .iter()
+                .any(|alias| self.command_name_taken(alias))
+        {
             self.registration_errors
                 .push(format!("duplicate command '{}'", command.name));
             return;
         }
 
         self.commands.insert(command.name.clone(), command);
+    }
+
+    fn command_name_taken(&self, name: &str) -> bool {
+        self.commands.contains_key(name)
+            || self
+                .commands
+                .values()
+                .any(|command| command.aliases.iter().any(|alias| alias == name))
     }
 
     fn registration_result(&self) -> Result<()> {
@@ -438,8 +603,7 @@ impl CommandGroup {
     }
 
     fn handler_for(&self, command: &str) -> Result<CommandHandler> {
-        self.commands
-            .get(command)
+        self.find_command(command)
             .map(|entry| Arc::clone(&entry.handler))
             .ok_or_else(|| {
                 Error::invalid_input(format!(
@@ -447,6 +611,14 @@ impl CommandGroup {
                     self.name
                 ))
             })
+    }
+
+    fn find_command(&self, name: &str) -> Option<&Command> {
+        self.commands.get(name).or_else(|| {
+            self.commands
+                .values()
+                .find(|command| command.aliases.iter().any(|alias| alias == name))
+        })
     }
 }
 
@@ -515,20 +687,31 @@ impl App {
             stdout.clone(),
             stderr.clone(),
         );
+
+        if let Err(error) = self.lifecycle.run_start(ctx.clone()).await {
+            return TestResult::failure(stdout, stderr, error);
+        }
+        if let Err(error) = self.lifecycle.run_ready(ctx.clone()).await {
+            return TestResult::failure(stdout, stderr, error);
+        }
+
         let handler =
             match self.handler_for(selection.group.as_deref(), selection.command.as_deref()) {
                 Ok(handler) => handler,
                 Err(error) => return TestResult::failure(stdout, stderr, error),
             };
 
-        let result = match handler(ctx.clone()).await {
+        let command_result = match handler(ctx.clone()).await {
             Ok(()) => ctx.join_all().await,
             Err(error) => Err(error),
         };
 
-        match result {
-            Ok(()) => TestResult::success(stdout, stderr),
-            Err(error) => TestResult::failure(stdout, stderr, error),
+        let shutdown_result = self.lifecycle.run_shutdown(ctx.clone()).await;
+
+        match (command_result, shutdown_result) {
+            (Err(command_error), _) => TestResult::failure(stdout, stderr, command_error),
+            (Ok(()), Err(shutdown_error)) => TestResult::failure(stdout, stderr, shutdown_error),
+            (Ok(()), Ok(())) => TestResult::success(stdout, stderr),
         }
     }
 }
@@ -544,6 +727,8 @@ pub struct TestResult {
     pub stderr: String,
     /// Error message, when the command failed.
     pub error: Option<String>,
+    /// CLI-oriented exit code. Success is 0.
+    pub exit_code: i32,
 }
 
 impl TestResult {
@@ -553,10 +738,12 @@ impl TestResult {
             stdout: stdout.lock().expect("stdout buffer poisoned").clone(),
             stderr: stderr.lock().expect("stderr buffer poisoned").clone(),
             error: None,
+            exit_code: 0,
         }
     }
 
     fn failure(stdout: Arc<Mutex<String>>, stderr: Arc<Mutex<String>>, error: Error) -> Self {
+        let exit_code = error.exit_code();
         {
             let mut err = stderr.lock().expect("stderr buffer poisoned");
             err.push_str(&format!("error: {error}\n"));
@@ -567,6 +754,7 @@ impl TestResult {
             stdout: stdout.lock().expect("stdout buffer poisoned").clone(),
             stderr: stderr.lock().expect("stderr buffer poisoned").clone(),
             error: Some(error.to_string()),
+            exit_code,
         }
     }
 
@@ -582,6 +770,15 @@ impl TestResult {
     /// Asserts the command failed.
     pub fn assert_failure(&self) {
         assert!(self.error.is_some(), "expected failure, got success");
+    }
+
+    /// Asserts the captured exit code.
+    pub fn assert_exit_code(&self, expected: i32) {
+        assert_eq!(
+            self.exit_code, expected,
+            "expected exit code {expected}, got {}",
+            self.exit_code
+        );
     }
 
     /// Asserts stdout contains text.
@@ -618,8 +815,28 @@ mod tests {
         Err(Error::msg("failed"))
     }
 
+    async fn exit(ctx: Context) -> Result<()> {
+        ctx.eprintln("exiting");
+        Err(Error::exit(7, "explicit exit"))
+    }
+
     async fn status(ctx: Context) -> Result<()> {
         ctx.println("status ok");
+        Ok(())
+    }
+
+    async fn start(ctx: Context) -> Result<()> {
+        ctx.println("start");
+        Ok(())
+    }
+
+    async fn ready(ctx: Context) -> Result<()> {
+        ctx.println("ready");
+        Ok(())
+    }
+
+    async fn shutdown(ctx: Context) -> Result<()> {
+        ctx.println("shutdown");
         Ok(())
     }
 
@@ -677,6 +894,16 @@ mod tests {
         res.assert_failure();
         res.assert_stderr_contains("about to fail");
         res.assert_stderr_contains("failed");
+        res.assert_exit_code(1);
+    }
+
+    #[tokio::test]
+    async fn captures_explicit_exit_code() {
+        let res = App::new().command(exit).test().args(["exit"]).run().await;
+
+        res.assert_failure();
+        res.assert_stderr_contains("explicit exit");
+        res.assert_exit_code(7);
     }
 
     #[tokio::test]
@@ -765,6 +992,7 @@ mod tests {
 
         res.assert_failure();
         res.assert_stderr_contains("duplicate command 'hello'");
+        res.assert_exit_code(2);
     }
 
     #[tokio::test]
@@ -805,5 +1033,85 @@ mod tests {
 
         res.assert_failure();
         res.assert_stderr_contains("unknown command 'missing' in group 'admin'");
+    }
+
+    #[tokio::test]
+    async fn lifecycle_hooks_run_around_command() {
+        let res = App::new()
+            .on_start(start)
+            .on_ready(ready)
+            .on_shutdown(shutdown)
+            .command(status)
+            .test()
+            .args(["status"])
+            .run()
+            .await;
+
+        res.assert_success();
+        assert_eq!(res.stdout, "start\nready\nstatus ok\nshutdown\n");
+    }
+
+    #[tokio::test]
+    async fn lifecycle_shutdown_runs_after_command_failure() {
+        let res = App::new()
+            .on_shutdown(shutdown)
+            .command(fail)
+            .test()
+            .args(["fail"])
+            .run()
+            .await;
+
+        res.assert_failure();
+        res.assert_stdout_contains("shutdown");
+        res.assert_stderr_contains("failed");
+    }
+
+    #[tokio::test]
+    async fn command_alias_routes_to_handler() {
+        let res = App::new()
+            .command_alias("hi", hello)
+            .test()
+            .args(["hi", "--name", "Ayu"])
+            .run()
+            .await;
+
+        res.assert_success();
+        res.assert_stdout_contains("hello Ayu");
+    }
+
+    #[tokio::test]
+    async fn nested_command_group_alias_routes_to_handler() {
+        let res = App::new()
+            .group(crate::CommandGroup::__from_static("admin").command_alias("ok", status))
+            .test()
+            .args(["admin", "ok"])
+            .run()
+            .await;
+
+        res.assert_success();
+        res.assert_stdout_contains("status ok");
+    }
+
+    #[tokio::test]
+    async fn hidden_command_routes_but_is_not_listed_in_help() {
+        let help = App::new()
+            .hidden_command(status)
+            .test()
+            .args(["--help"])
+            .run()
+            .await;
+
+        help.assert_success();
+        assert!(!help.stdout.contains("status"));
+
+        let run = App::new()
+            .hidden_command(status)
+            .test()
+            .args(["status"])
+            .run()
+            .await;
+
+        run.assert_success();
+        run.assert_stdout_contains("status ok");
     }
 }

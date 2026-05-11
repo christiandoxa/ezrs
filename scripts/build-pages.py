@@ -155,6 +155,10 @@ def page(title: str, body: str, active: str = "") -> str:
         ("Go Patterns", "golang-patterns.html"),
         ("Go Tour", "go-tour.html"),
         ("Process", "process-management.html"),
+        ("Lifecycle", "lifecycle.html"),
+        ("Typed Args", "typed-args.html"),
+        ("Testing", "testing.html"),
+        ("Cookbook", "cookbook.html"),
         ("Examples", "examples.html"),
         ("API", "api/ezrs/index.html"),
     ]
@@ -301,6 +305,30 @@ async fn hello(ctx: Context) -> Result&lt;()&gt; {
         OUT / "process-management.html",
         "Process Management",
         "Process",
+    )
+    render_markdown_file(
+        ROOT / "docs" / "lifecycle.md",
+        OUT / "lifecycle.html",
+        "Lifecycle",
+        "Lifecycle",
+    )
+    render_markdown_file(
+        ROOT / "docs" / "typed-args.md",
+        OUT / "typed-args.html",
+        "Typed Args",
+        "Typed Args",
+    )
+    render_markdown_file(
+        ROOT / "docs" / "testing.md",
+        OUT / "testing.html",
+        "Testing",
+        "Testing",
+    )
+    render_markdown_file(
+        ROOT / "docs" / "cookbook.md",
+        OUT / "cookbook.html",
+        "Cookbook",
+        "Cookbook",
     )
     build_examples()
     copy_api_docs()

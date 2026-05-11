@@ -9,6 +9,9 @@ pub(crate) type CommandHandler = Arc<dyn Fn(Context) -> CommandFuture + Send + S
 pub(crate) struct Command {
     pub(crate) name: String,
     pub(crate) handler: CommandHandler,
+    pub(crate) aliases: Vec<String>,
+    pub(crate) hidden: bool,
+    pub(crate) about: Option<String>,
 }
 
 impl Command {
@@ -28,7 +31,25 @@ impl Command {
         Self {
             name: name.into(),
             handler: Arc::new(move |ctx| Box::pin(handler(ctx))),
+            aliases: Vec::new(),
+            hidden: false,
+            about: None,
         }
+    }
+
+    pub(crate) fn alias(mut self, alias: impl Into<String>) -> Self {
+        self.aliases.push(alias.into());
+        self
+    }
+
+    pub(crate) fn hidden(mut self) -> Self {
+        self.hidden = true;
+        self
+    }
+
+    pub(crate) fn about(mut self, about: impl Into<String>) -> Self {
+        self.about = Some(about.into());
+        self
     }
 }
 

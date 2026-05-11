@@ -3,7 +3,7 @@ use std::{
     future::Future,
     io::Write,
     sync::{Arc, Mutex},
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use tokio::io::AsyncReadExt;
@@ -116,6 +116,21 @@ impl Context {
         crate::task::install_ctrl_c(self.inner.cancellation.clone());
     }
 
+    fn with_cancellation(&self, cancellation: Cancellation) -> Self {
+        Self {
+            inner: Arc::new(ContextInner {
+                args: self.inner.args.clone(),
+                state: self.inner.state.clone(),
+                config: self.inner.config.clone(),
+                logger: self.inner.logger,
+                fs: self.inner.fs,
+                tasks: TaskManager::new(),
+                cancellation,
+                output: self.inner.output.clone(),
+            }),
+        }
+    }
+
     /// Reads a required dynamic argument by name or positional index.
     pub fn arg(&self, key: &str) -> Result<String> {
         self.inner
@@ -202,6 +217,34 @@ impl Context {
         self.inner.cancellation.cancel();
     }
 
+    /// Creates a child Context cancelled when the parent is cancelled or the timeout expires.
+    pub fn with_timeout(&self, duration: Duration) -> Self {
+        let child_cancellation = Cancellation::new();
+        let parent_cancellation = self.inner.cancellation.clone();
+        let watcher_cancellation = child_cancellation.clone();
+
+        tokio::spawn(async move {
+            tokio::select! {
+                () = parent_cancellation.cancelled() => watcher_cancellation.cancel(),
+                () = tokio::time::sleep(duration) => watcher_cancellation.cancel(),
+            }
+        });
+
+        self.with_cancellation(child_cancellation)
+    }
+
+    /// Creates a child Context cancelled when the deadline is reached.
+    pub fn with_deadline(&self, deadline: Instant) -> Self {
+        match deadline.checked_duration_since(Instant::now()) {
+            Some(duration) => self.with_timeout(duration),
+            None => {
+                let child = self.with_cancellation(Cancellation::new());
+                child.cancel();
+                child
+            }
+        }
+    }
+
     /// Returns file helper handle.
     pub fn fs(&self) -> Fs {
         self.inner.fs
@@ -244,5 +287,50 @@ impl Context {
     /// Sleeps for whole seconds.
     pub async fn sleep_secs(&self, seconds: u64) {
         tokio::time::sleep(Duration::from_secs(seconds)).await;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn empty_context() -> Context {
+        Context::memory(
+            Args::default(),
+            TypeStore::default(),
+            TypeStore::default(),
+            Arc::new(Mutex::new(String::new())),
+            Arc::new(Mutex::new(String::new())),
+        )
+    }
+
+    #[tokio::test]
+    async fn timeout_child_context_cancels_after_duration() {
+        let ctx = empty_context();
+        let child = ctx.with_timeout(Duration::from_millis(5));
+
+        child.cancelled().await;
+
+        assert!(child.is_cancelled());
+        assert!(!ctx.is_cancelled());
+    }
+
+    #[tokio::test]
+    async fn child_context_observes_parent_cancellation() {
+        let ctx = empty_context();
+        let child = ctx.with_timeout(Duration::from_secs(60));
+
+        ctx.cancel();
+        child.cancelled().await;
+
+        assert!(child.is_cancelled());
+    }
+
+    #[tokio::test]
+    async fn past_deadline_is_cancelled_immediately() {
+        let ctx = empty_context();
+        let child = ctx.with_deadline(Instant::now() - Duration::from_secs(1));
+
+        assert!(child.is_cancelled());
     }
 }

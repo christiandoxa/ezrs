@@ -142,6 +142,8 @@ Update README.md when public API changes.
 
 Update docs/golang-patterns.md when adding or changing Go-pattern-related behavior.
 
+Update docs/go-tour-mapping.md and examples/go_tour/ when changing Go Tour coverage.
+
 Update component examples when component APIs change.
 
 ## Design principle

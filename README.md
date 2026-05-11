@@ -26,6 +26,12 @@ CLI users install the `ezrs` binary:
 cargo install ezrs
 ```
 
+## CI And Release
+
+The repository uses GitHub Actions for `cargo fmt --all --check`, `cargo check --workspace --all-targets`, `cargo test --workspace --all-targets`, `cargo clippy --workspace --all-targets -- -D warnings`, and example compilation.
+
+Publishing runs from the release workflow on GitHub release publication or manual dispatch. Maintainers must configure the repository secret `CARGO_REGISTRY_TOKEN` with a crates.io API token before running the publish workflow.
+
 ## Quickstart
 
 ```rust
@@ -259,6 +265,12 @@ ezrs translates Go application patterns into Rust. It does not copy Go syntax.
 - table-driven tests map to normal Rust test loops plus `#[ezrs::test]`.
 
 See `docs/golang-patterns.md` and `examples/golang_patterns/`.
+
+## Go Tour Coverage
+
+ezrs also includes a Go Tour mapping guide for developers learning Rust from Go concepts. See `docs/go-tour-mapping.md` and `examples/go_tour/`.
+
+The guide covers the Go Tour topic families: basics, flow control, more types, methods and interfaces, generics, and concurrency. It maps each topic to idiomatic Rust and marks non-framework exercises as documented examples rather than new ezrs APIs.
 
 ## Golang Pattern Mapping Summary
 

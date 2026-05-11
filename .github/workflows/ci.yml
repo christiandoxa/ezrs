@@ -1,0 +1,73 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  quality:
+    name: Quality Gates
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust components
+        run: rustup component add rustfmt clippy
+
+      - name: Check formatting
+        run: cargo fmt --all --check
+
+      - name: Check workspace
+        run: cargo check --workspace --all-targets
+
+      - name: Test workspace
+        run: cargo test --workspace --all-targets
+
+      - name: Lint workspace
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Compile documentation examples
+        run: |
+          set -euo pipefail
+
+          rm -rf target/example-check
+          mkdir -p target/example-check
+
+          cat > target/example-check/Cargo.toml <<'TOML'
+          [package]
+          name = "ezrs-example-check"
+          version = "0.0.0"
+          edition = "2024"
+          publish = false
+
+          [workspace]
+
+          [dependencies]
+          ezrs = { path = "../../crates/ezrs" }
+          serde = { version = "1", features = ["derive"] }
+          tokio = { version = "1", features = ["full"] }
+          TOML
+
+          for example in examples/components/*.rs examples/golang_patterns/*.rs examples/go_tour/*.rs; do
+            name="${example%.rs}"
+            name="${name//\//_}"
+            {
+              echo
+              echo "[[bin]]"
+              echo "name = \"$name\""
+              echo "path = \"../../$example\""
+            } >> target/example-check/Cargo.toml
+          done
+
+          cargo check --manifest-path target/example-check/Cargo.toml --bins --tests

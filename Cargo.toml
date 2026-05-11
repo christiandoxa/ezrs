@@ -17,8 +17,9 @@ members = [
 [workspace.package]
 edition = "2024"
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/your-org/ezrs"
-homepage = "https://github.com/your-org/ezrs"
+description = "Go-style application patterns for Rust CLI apps, workers, and background jobs."
+repository = "https://github.com/christiandoxa/ezrs"
+homepage = "https://github.com/christiandoxa/ezrs"
 documentation = "https://docs.rs/ezrs"
 readme = "README.md"
 
@@ -40,13 +41,13 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 walkdir = "2"
 
-ezrs = { path = "crates/ezrs" }
-ezrs-config = { path = "crates/ezrs-config" }
-ezrs-core = { path = "crates/ezrs-core" }
-ezrs-error = { path = "crates/ezrs-error" }
-ezrs-fs = { path = "crates/ezrs-fs" }
-ezrs-log = { path = "crates/ezrs-log" }
-ezrs-macros = { path = "crates/ezrs-macros" }
-ezrs-shared = { path = "crates/ezrs-shared" }
-ezrs-task = { path = "crates/ezrs-task" }
-ezrs-test = { path = "crates/ezrs-test" }
+ezrs = { version = "0.1.0", path = "crates/ezrs" }
+ezrs-config = { version = "0.1.0", path = "crates/ezrs-config" }
+ezrs-core = { version = "0.1.0", path = "crates/ezrs-core" }
+ezrs-error = { version = "0.1.0", path = "crates/ezrs-error" }
+ezrs-fs = { version = "0.1.0", path = "crates/ezrs-fs" }
+ezrs-log = { version = "0.1.0", path = "crates/ezrs-log" }
+ezrs-macros = { version = "0.1.0", path = "crates/ezrs-macros" }
+ezrs-shared = { version = "0.1.0", path = "crates/ezrs-shared" }
+ezrs-task = { version = "0.1.0", path = "crates/ezrs-task" }
+ezrs-test = { version = "0.1.0", path = "crates/ezrs-test" }

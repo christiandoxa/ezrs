@@ -20,10 +20,34 @@ async fn run(ctx: Context) -> Result<()> {
 }
 ```
 
+## Cobra-Style Flags
+
+Use `CommandSpec` when a command should reject unknown flags, provide short
+aliases, apply defaults, or render command-specific help.
+
+```rust
+use ezrs::{App, ArgSpec, CommandSpec, Context, Result};
+
+#[ezrs::main]
+async fn main() -> Result<()> {
+    let spec = CommandSpec::new()
+        .arg(ArgSpec::option("path").short('p').required())
+        .arg(ArgSpec::flag("recursive").short('r'))
+        .arg(ArgSpec::option("limit").default("100").env("SCAN_LIMIT"));
+
+    App::new().command_with(scan, spec).run().await
+}
+
+async fn scan(ctx: Context) -> Result<()> {
+    ctx.println(ctx.arg("path")?);
+    Ok(())
+}
+```
+
 ## exec.CommandContext
 
-Use `Context::process` for command construction and `timeout_secs` for a
-CommandContext-style deadline.
+Use `Context::process` for command construction. It is cancellation-aware by
+default and `timeout_secs` adds a CommandContext-style deadline.
 
 ```rust
 use ezrs::{App, Context, Result};
@@ -77,7 +101,7 @@ Keep domain code behind traits so tests can pass fake repositories as state.
 ```rust
 use std::sync::Arc;
 
-use ezrs::{App, Context, Result};
+use ezrs::{App, ConfigSource, Context, Result};
 
 trait Users: Send + Sync {
     fn count(&self) -> usize;
@@ -129,7 +153,7 @@ struct Config {
 #[ezrs::main]
 async fn main() -> Result<()> {
     App::new()
-        .config::<Config>()
+        .config_from::<Config>(ConfigSource::ezrs().env_prefix("APP"))
         .command(run)
         .run()
         .await
@@ -159,11 +183,12 @@ async fn main() -> Result<()> {
 }
 
 async fn run(ctx: Context) -> Result<()> {
-    let group = ctx.task_group().cancel_on_error(true);
+    let group = ctx.err_group();
     let worker_ctx = ctx.clone();
 
-    group.spawn(async move {
+    group.spawn_named_with_cancel("ticker", move |cancellation| async move {
         loop {
+            cancellation.check_cancelled()?;
             worker_ctx.check_cancelled()?;
             worker_ctx.sleep_secs(1).await;
             worker_ctx.println("tick");

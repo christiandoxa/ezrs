@@ -1,10 +1,21 @@
-//! Go pattern: flag package or cobra flags, accessed dynamically.
+//! Go pattern: flag package or cobra flags with schema validation.
 
-use ezrs::{App, Context, Result};
+use ezrs::{App, ArgSpec, CommandSpec, Context, Result};
 
 #[ezrs::main]
 async fn main() -> Result<()> {
-    App::new().command(scan).run().await
+    let spec = CommandSpec::new()
+        .arg(
+            ArgSpec::option("path")
+                .short('p')
+                .default(".")
+                .help("Path to scan"),
+        )
+        .arg(ArgSpec::flag("recursive").short('r').help("Scan recursively"))
+        .arg(ArgSpec::option("name").default("default"))
+        .arg(ArgSpec::positional("input").value_name("INPUT"));
+
+    App::new().command_with(scan, spec).run().await
 }
 
 async fn scan(ctx: Context) -> Result<()> {
@@ -21,4 +32,4 @@ async fn scan(ctx: Context) -> Result<()> {
 }
 
 // Try:
-// cargo run -- scan --recursive --path src --name=demo input.txt
+// cargo run -- scan -r --path src --name=demo input.txt

@@ -1,6 +1,8 @@
 //! Go pattern: handler tests with fake input and captured output.
 
 use ezrs::{App, Context, Result};
+#[cfg(test)]
+use ezrs::EnvMap;
 
 async fn hello(ctx: Context) -> Result<()> {
     ctx.println(format!("hello {}", ctx.arg_or("name", "world")));
@@ -21,7 +23,26 @@ async fn hello_works() {
         .await;
 
     res.assert_success();
-    res.assert_stdout_contains("Ayu");
+    res.assert_stdout_eq("hello Ayu\n");
+}
+
+#[ezrs::test]
+async fn env_is_injected_without_global_mutation() {
+    async fn read_env(ctx: Context) -> Result<()> {
+        ctx.println(ctx.env("APP_NAME")?);
+        Ok(())
+    }
+
+    let res = App::new()
+        .command(read_env)
+        .test()
+        .env(EnvMap::new().set("APP_NAME", "demo"))
+        .args(["read_env"])
+        .run()
+        .await;
+
+    res.assert_success();
+    res.assert_stdout_eq("demo\n");
 }
 
 #[ezrs::test]

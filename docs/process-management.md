@@ -1,6 +1,7 @@
 # Process Management
 
-`Process` is the small ezrs building block for running child processes with timeout-aware cancellation.
+`Process` is the small ezrs building block for running child processes with
+timeout-aware and Context-aware cancellation.
 
 ```rust
 use ezrs::{Context, Result};
@@ -21,4 +22,10 @@ async fn check_tool(ctx: Context) -> Result<()> {
 }
 ```
 
-This maps to the `exec.CommandContext` pattern: configure the command, run it asynchronously, and let the timeout kill the child if it does not exit in time.
+This maps to the `exec.CommandContext` pattern: configure the command, run it
+asynchronously, and let the timeout or parent `Context` kill the child if it
+does not exit in time.
+
+`ctx.process("program")` attaches the app cancellation token and enables
+kill-on-drop. `Process::new("program")` remains the low-level escape hatch for
+detached process setup.

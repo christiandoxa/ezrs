@@ -46,6 +46,49 @@ impl Logger {
     pub fn error(&self, message: impl Display) {
         tracing::error!("{message}");
     }
+
+    /// Logs an info message with stable key/value fields.
+    pub fn info_fields<K, V, I>(&self, message: impl Display, fields: I)
+    where
+        K: AsRef<str>,
+        V: Display,
+        I: IntoIterator<Item = (K, V)>,
+    {
+        tracing::info!(fields = %render_fields(fields), "{message}");
+    }
+
+    /// Logs a warning message with stable key/value fields.
+    pub fn warn_fields<K, V, I>(&self, message: impl Display, fields: I)
+    where
+        K: AsRef<str>,
+        V: Display,
+        I: IntoIterator<Item = (K, V)>,
+    {
+        tracing::warn!(fields = %render_fields(fields), "{message}");
+    }
+
+    /// Logs an error message with stable key/value fields.
+    pub fn error_fields<K, V, I>(&self, message: impl Display, fields: I)
+    where
+        K: AsRef<str>,
+        V: Display,
+        I: IntoIterator<Item = (K, V)>,
+    {
+        tracing::error!(fields = %render_fields(fields), "{message}");
+    }
+}
+
+fn render_fields<K, V, I>(fields: I) -> String
+where
+    K: AsRef<str>,
+    V: Display,
+    I: IntoIterator<Item = (K, V)>,
+{
+    fields
+        .into_iter()
+        .map(|(key, value)| format!("{}={value}", key.as_ref()))
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 #[cfg(test)]
@@ -56,5 +99,13 @@ mod tests {
     fn init_default_does_not_panic() {
         init_default().expect("logger should initialize");
         init_default().expect("logger should be idempotent");
+    }
+
+    #[test]
+    fn renders_fields() {
+        assert_eq!(
+            render_fields([("worker", 2), ("attempt", 3)]),
+            "worker=2 attempt=3"
+        );
     }
 }

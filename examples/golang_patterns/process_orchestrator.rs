@@ -1,20 +1,18 @@
-//! Go pattern: exec.CommandContext.
+//! Go pattern: exec.CommandContext in a small orchestrator command.
 
 use ezrs::{App, Context, Result};
 
 #[ezrs::main]
 async fn main() -> Result<()> {
-    App::new().command(version).run().await
+    App::new().command(check_toolchain).run().await
 }
 
-async fn version(ctx: Context) -> Result<()> {
-    // Context process builders are cancellation-aware by default, like
-    // Go's exec.CommandContext.
+async fn check_toolchain(ctx: Context) -> Result<()> {
     let output = ctx
         .process("rustc")
         .arg("--version")
-        .timeout_secs(5)
         .capture()
+        .timeout_secs(5)
         .run()
         .await?;
 

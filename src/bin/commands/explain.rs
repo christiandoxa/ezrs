@@ -64,6 +64,34 @@ pub fn explain(error: &str) -> String {
             "async fn run(ctx: ezrs::Context) -> ezrs::Result<()> { Ok(()) }",
         );
     }
+    if lower.contains("unknown flag") {
+        return advice(
+            "A command received a flag that is not declared in its CommandSpec.",
+            "Declare the flag with ArgSpec or allow passthrough args for wrapper commands.",
+            "CommandSpec::new().arg(ArgSpec::flag(\"verbose\").short('v'))",
+        );
+    }
+    if lower.contains("missing required argument") {
+        return advice(
+            "A command schema requires an argument that was not provided.",
+            "Pass the argument, add a default, or bind an environment variable.",
+            "ArgSpec::option(\"path\").required().env(\"APP_PATH\")",
+        );
+    }
+    if lower.contains("required config source") || lower.contains("toml") {
+        return advice(
+            "Typed config could not be loaded from the configured source.",
+            "Check the file path, TOML shape, env prefix, and validation function.",
+            "App::new().config_from::<Config>(ConfigSource::ezrs().required())",
+        );
+    }
+    if lower.contains("process") && lower.contains("cancelled") {
+        return advice(
+            "A child process was cancelled through the ezrs Context.",
+            "Handle cancellation as a normal shutdown path, or use Process::new for low-level detached behavior.",
+            "ctx.process(\"cargo\").arg(\"check\").run().await?",
+        );
+    }
 
     advice(
         "No specific ezrs explanation matched this error.",

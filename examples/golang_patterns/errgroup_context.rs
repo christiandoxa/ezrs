@@ -1,12 +1,16 @@
-//! Go pattern: goroutine group plus WaitGroup-style join.
+//! Go pattern: errgroup.WithContext.
 
-use ezrs::{Result, TaskGroup};
+use ezrs::{Context, Result};
 
 #[ezrs::main]
 async fn main() -> Result<()> {
-    let group = TaskGroup::err_group();
+    ezrs::App::new().command(run).run().await
+}
 
-    for item in ["alpha", "beta", "gamma"] {
+async fn run(ctx: Context) -> Result<()> {
+    let group = ctx.err_group();
+
+    for item in ["a", "b", "c"] {
         group.spawn_named_with_cancel(item, move |cancellation| async move {
             cancellation.check_cancelled()?;
             println!("processed {item}");

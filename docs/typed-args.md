@@ -4,6 +4,20 @@ Typed args map dynamic CLI input into a Rust struct without adding a proc-macro 
 
 This matches the Go `flag` package and cobra/pflag pattern: flags are still external user input, but handler code works with typed fields instead of repeating `ctx.arg("name")` and `ctx.flag("name")`.
 
+Use `CommandSpec` and `ArgSpec` when the command should validate accepted
+flags, support short aliases, render command-specific help, apply defaults, or
+read env fallbacks. Use `TypedArgs` when handler code wants a Rust struct.
+They compose cleanly: schema validates input first, then `TypedArgs` reads it.
+
+```rust
+let spec = ezrs::CommandSpec::new()
+    .arg(ezrs::ArgSpec::option("path").short('p').required())
+    .arg(ezrs::ArgSpec::flag("recursive").short('r'))
+    .arg(ezrs::ArgSpec::option("limit").default("100").env("SCAN_LIMIT"));
+
+ezrs::App::new().command_with(scan, spec).run().await
+```
+
 ## Why There Is No Derive
 
 Rust `#[derive(...)]` implementations must live in a proc-macro crate. `ezrs` intentionally publishes one crate for v0.1.0, so it cannot provide `#[derive(ezrs::Args)]` without restoring a second published crate.
@@ -46,6 +60,8 @@ async fn scan(ctx: Context) -> Result<()> {
 ## API
 
 - `TypedArgs`: implement this for a typed argument struct.
+- `CommandSpec`: command-level schema for validation and help.
+- `ArgSpec`: flag, option, or positional declaration.
 - `FromArgs`: compatibility trait for building from `ezrs::Args`.
 - `ArgSource`: common source trait implemented by `Args` and `Context`.
 - `required(source, key)`: reads and parses a required named or positional argument.

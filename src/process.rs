@@ -8,7 +8,7 @@ use std::{
 
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-use crate::{Error, Result};
+use crate::{Cancellation, Error, Result};
 
 /// Builder for running a child process.
 #[derive(Debug, Clone)]
@@ -20,6 +20,8 @@ pub struct Process {
     stdin: Option<Vec<u8>>,
     timeout: Option<Duration>,
     capture: bool,
+    cancellation: Option<Cancellation>,
+    kill_on_drop: bool,
 }
 
 impl Process {
@@ -33,6 +35,8 @@ impl Process {
             stdin: None,
             timeout: None,
             capture: false,
+            cancellation: None,
+            kill_on_drop: false,
         }
     }
 
@@ -82,10 +86,23 @@ impl Process {
         self
     }
 
+    /// Cancels and kills the child when the cancellation handle fires.
+    pub fn with_cancellation(mut self, cancellation: Cancellation) -> Self {
+        self.cancellation = Some(cancellation);
+        self
+    }
+
+    /// Configures Tokio to kill the child if the process handle is dropped.
+    pub fn kill_on_drop(mut self) -> Self {
+        self.kill_on_drop = true;
+        self
+    }
+
     /// Runs the child and returns status plus any captured output.
     pub async fn run(self) -> Result<ProcessOutput> {
         let mut command = tokio::process::Command::new(&self.program);
         command.args(&self.args).envs(self.envs.iter().cloned());
+        command.kill_on_drop(self.kill_on_drop);
 
         if let Some(current_dir) = &self.current_dir {
             command.current_dir(current_dir);
@@ -125,21 +142,13 @@ impl Process {
             })
         });
 
-        let status = match self.timeout {
-            Some(timeout) => match tokio::time::timeout(timeout, child.wait()).await {
-                Ok(status) => status?,
-                Err(_) => {
-                    let _ = child.kill().await;
-                    let _ = child.wait().await;
-                    return Err(Error::timeout(format!(
-                        "process `{}` exceeded {}s",
-                        self.program,
-                        timeout.as_secs()
-                    )));
-                }
-            },
-            None => child.wait().await?,
-        };
+        let status = wait_child(
+            &mut child,
+            &self.program,
+            self.timeout,
+            self.cancellation.as_ref(),
+        )
+        .await?;
 
         if let Some(task) = stdin_task {
             task.await
@@ -239,6 +248,59 @@ async fn join_bytes(
     }
 }
 
+async fn wait_child(
+    child: &mut tokio::process::Child,
+    program: &str,
+    timeout: Option<Duration>,
+    cancellation: Option<&Cancellation>,
+) -> Result<ExitStatus> {
+    match (timeout, cancellation) {
+        (Some(timeout), Some(cancellation)) => {
+            tokio::select! {
+                status = child.wait() => Ok(status?),
+                () = tokio::time::sleep(timeout) => {
+                    kill_child(child).await;
+                    Err(Error::timeout(format!(
+                        "process `{program}` exceeded {}s",
+                        timeout.as_secs()
+                    )))
+                }
+                () = cancellation.cancelled() => {
+                    kill_child(child).await;
+                    Err(Error::cancelled(format!("process `{program}` cancelled")))
+                }
+            }
+        }
+        (Some(timeout), None) => {
+            tokio::select! {
+                status = child.wait() => Ok(status?),
+                () = tokio::time::sleep(timeout) => {
+                    kill_child(child).await;
+                    Err(Error::timeout(format!(
+                        "process `{program}` exceeded {}s",
+                        timeout.as_secs()
+                    )))
+                }
+            }
+        }
+        (None, Some(cancellation)) => {
+            tokio::select! {
+                status = child.wait() => Ok(status?),
+                () = cancellation.cancelled() => {
+                    kill_child(child).await;
+                    Err(Error::cancelled(format!("process `{program}` cancelled")))
+                }
+            }
+        }
+        (None, None) => Ok(child.wait().await?),
+    }
+}
+
+async fn kill_child(child: &mut tokio::process::Child) {
+    let _ = child.kill().await;
+    let _ = child.wait().await;
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -299,6 +361,26 @@ mod tests {
             error
                 .to_string()
                 .contains("timeout: process `sh` exceeded 1s")
+        );
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn cancellation_kills_child() {
+        let cancellation = Cancellation::new();
+        cancellation.cancel();
+
+        let error = Process::new("sh")
+            .args(["-c", "sleep 2"])
+            .with_cancellation(cancellation)
+            .run()
+            .await
+            .expect_err("cancelled");
+
+        assert!(
+            error
+                .to_string()
+                .contains("cancelled: process `sh` cancelled")
         );
     }
 }

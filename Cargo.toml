@@ -1,8 +1,6 @@
-[workspace]
-resolver = "3"
-members = ["crates/ezrs"]
-
-[workspace.package]
+[package]
+name = "ezrs"
+version = "0.1.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 description = "Go-style application patterns for Rust CLI apps, workers, and background jobs."
@@ -11,13 +9,21 @@ homepage = "https://github.com/christiandoxa/ezrs"
 documentation = "https://docs.rs/ezrs"
 readme = "README.md"
 
-[workspace.dependencies]
+[[bin]]
+name = "ezrs"
+path = "src/bin/ezrs.rs"
+required-features = ["cli"]
+
+[features]
+default = ["cli"]
+cli = ["dep:clap"]
+
+[dependencies]
 anyhow = "1"
-clap = { version = "4", features = ["derive"] }
+clap = { version = "4", features = ["derive"], optional = true }
 dotenvy = "0.15"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-tempfile = "3"
 thiserror = "2"
 tokio = { version = "1", features = ["full"] }
 tokio-util = "0.7"
@@ -25,3 +31,6 @@ toml = "1"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 walkdir = "2"
+
+[dev-dependencies]
+tempfile = "3"

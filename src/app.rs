@@ -8,10 +8,8 @@ use std::{
 use serde::de::DeserializeOwned;
 
 use crate::{
-    Args, Context, Error, Result,
-    command::{Command, CommandHandler},
-    lifecycle::Lifecycle,
-    state::TypeStore,
+    Args, CommandSpec, ConfigSource, Context, Error, Result, command::Command,
+    lifecycle::Lifecycle, state::TypeStore, test_support::EnvMap,
 };
 
 type ConfigLoader =
@@ -25,7 +23,7 @@ pub struct App {
     about: Option<String>,
     commands: HashMap<String, Command>,
     groups: HashMap<String, CommandGroup>,
-    default_command: Option<CommandHandler>,
+    default_command: Option<Command>,
     registration_errors: Vec<String>,
     state: TypeStore,
     config_loaders: Vec<ConfigLoader>,
@@ -82,6 +80,44 @@ impl App {
         self
     }
 
+    /// Registers typed config loaded from explicit file/env layers.
+    pub fn config_from<T>(mut self, source: ConfigSource) -> Self
+    where
+        T: DeserializeOwned + Clone + Send + Sync + 'static,
+    {
+        self.config_loaders.push(Arc::new(move || {
+            let value = crate::config::load_from_source::<T>(source.clone())?;
+            Ok(value.map(|config| {
+                (
+                    TypeId::of::<T>(),
+                    Arc::new(config) as Arc<dyn Any + Send + Sync>,
+                )
+            }))
+        }));
+        self
+    }
+
+    /// Registers typed config and validates it after loading.
+    pub fn config_validated<T, F>(mut self, source: ConfigSource, validate: F) -> Self
+    where
+        T: DeserializeOwned + Clone + Send + Sync + 'static,
+        F: Fn(&T) -> Result<()> + Send + Sync + 'static,
+    {
+        let validate = Arc::new(validate);
+        self.config_loaders.push(Arc::new(move || {
+            let validate = Arc::clone(&validate);
+            let value =
+                crate::config::load_validated(source.clone(), move |config: &T| validate(config))?;
+            Ok(value.map(|config| {
+                (
+                    TypeId::of::<T>(),
+                    Arc::new(config) as Arc<dyn Any + Send + Sync>,
+                )
+            }))
+        }));
+        self
+    }
+
     /// Registers an async command and derives its CLI name from the handler function.
     ///
     /// Function `scan` becomes command `scan`. Module handlers named `run`, such as
@@ -92,6 +128,17 @@ impl App {
         Fut: Future<Output = Result<()>> + Send + 'static,
     {
         let command = Command::from_handler(handler);
+        self.insert_command(command);
+        self
+    }
+
+    /// Registers an async command with a typed argument schema.
+    pub fn command_with<F, Fut>(mut self, handler: F, spec: CommandSpec) -> Self
+    where
+        F: Fn(Context) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Result<()>> + Send + 'static,
+    {
+        let command = Command::from_handler(handler).spec(spec);
         self.insert_command(command);
         self
     }
@@ -162,7 +209,17 @@ impl App {
         F: Fn(Context) -> Fut + Send + Sync + 'static,
         Fut: Future<Output = Result<()>> + Send + 'static,
     {
-        self.default_command = Some(Arc::new(move |ctx| Box::pin(handler(ctx))));
+        self.default_command = Some(Command::from_handler(handler));
+        self
+    }
+
+    /// Registers a default command with a typed argument schema.
+    pub fn default_command_with<F, Fut>(mut self, handler: F, spec: CommandSpec) -> Self
+    where
+        F: Fn(Context) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Result<()>> + Send + 'static,
+    {
+        self.default_command = Some(Command::from_handler(handler).spec(spec));
         self
     }
 
@@ -223,11 +280,26 @@ impl App {
         outcome.map(|_| ())
     }
 
+    /// Runs the app and returns the shell exit code implied by the result.
+    pub async fn run_exit_code(self) -> i32 {
+        match self.run().await {
+            Ok(()) => 0,
+            Err(error) => error.exit_code(),
+        }
+    }
+
+    /// Runs the app and terminates the process with the implied shell exit code.
+    pub async fn run_and_exit(self) -> ! {
+        let code = self.run_exit_code().await;
+        std::process::exit(code);
+    }
+
     /// Builds an in-memory test runner for this app.
     pub fn test(self) -> AppTest {
         AppTest {
             app: self,
             args: Vec::new(),
+            env: None,
         }
     }
 
@@ -248,14 +320,18 @@ impl App {
 
         self.registration_result()?;
 
+        let command = self.command_for(selection.group.as_deref(), selection.command.as_deref())?;
+        let args = Args::parse_with_spec(&selection.args, &command.spec, |key| {
+            std::env::var(key).ok()
+        })?;
         let config = self.load_config()?;
-        let ctx = Context::runtime(selection.args, self.state.clone(), config);
+        let ctx = Context::runtime(args, self.state.clone(), config);
         ctx.install_ctrl_c();
 
         self.lifecycle.run_start(ctx.clone()).await?;
         self.lifecycle.run_ready(ctx.clone()).await?;
 
-        let handler = self.handler_for(selection.group.as_deref(), selection.command.as_deref())?;
+        let handler = Arc::clone(&command.handler);
         let command_result = match handler(ctx.clone()).await {
             Ok(()) => ctx.join_all().await,
             Err(error) => Err(error),
@@ -271,6 +347,14 @@ impl App {
     }
 
     fn insert_command(&mut self, command: Command) {
+        if let Some(error) = command.spec.validation_error() {
+            self.registration_errors.push(format!(
+                "command '{}': invalid argument schema: {error}",
+                command.name
+            ));
+            return;
+        }
+
         if self.command_name_taken(&command.name)
             || command
                 .aliases
@@ -319,7 +403,7 @@ impl App {
         Ok(store)
     }
 
-    fn handler_for(&self, group: Option<&str>, command: Option<&str>) -> Result<CommandHandler> {
+    fn command_for(&self, group: Option<&str>, command: Option<&str>) -> Result<&Command> {
         if let Some(group) = group {
             let group = self
                 .groups
@@ -328,19 +412,17 @@ impl App {
             let command = command.ok_or_else(|| {
                 Error::invalid_input(format!("no command provided for group '{}'", group.name))
             })?;
-            return group.handler_for(command);
+            return group.command_for(command);
         }
 
         if let Some(command) = command {
             return self
                 .find_command(command)
-                .map(|entry| Arc::clone(&entry.handler))
                 .ok_or_else(|| Error::invalid_input(format!("unknown command '{command}'")));
         }
 
         self.default_command
             .as_ref()
-            .map(Arc::clone)
             .ok_or_else(|| Error::invalid_input("no command provided"))
     }
 
@@ -393,7 +475,7 @@ impl App {
         Selection {
             group,
             command,
-            args: Args::parse(&remaining),
+            args: remaining,
             help,
             version,
         }
@@ -402,6 +484,31 @@ impl App {
     fn help_text(&self, group: Option<&str>, command: Option<&str>) -> String {
         let name = self.name.as_deref().unwrap_or("ezrs-app");
         let mut lines = Vec::new();
+
+        if let Some(command_name) = command {
+            let route = match group {
+                Some(group) => format!("{group} {command_name}"),
+                None => command_name.to_string(),
+            };
+            if let Ok(command) = self.command_for(group, Some(command_name)) {
+                lines.push(format!(
+                    "Usage: {name} {route} {}",
+                    command.spec.usage_suffix()
+                ));
+                lines.push(String::new());
+                lines.push(format!("Command: {route}"));
+                if let Some(about) = &command.about {
+                    lines.push(about.clone());
+                }
+                let arg_help = command.spec.help_lines();
+                if !arg_help.is_empty() {
+                    lines.push(String::new());
+                    lines.extend(arg_help);
+                }
+                return lines.join("\n");
+            }
+        }
+
         lines.push(format!("Usage: {name} [COMMAND] [ARGS]"));
 
         if let Some(about) = &self.about {
@@ -428,11 +535,6 @@ impl App {
                     }
                 }
             }
-        }
-
-        if let Some(command) = command {
-            lines.push(String::new());
-            lines.push(format!("Command: {command}"));
         }
 
         if !self.commands.is_empty() {
@@ -497,7 +599,7 @@ fn println_to_process(message: &str) {
 struct Selection {
     group: Option<String>,
     command: Option<String>,
-    args: Args,
+    args: Vec<String>,
     help: bool,
     version: bool,
 }
@@ -528,6 +630,16 @@ impl CommandGroup {
         Fut: Future<Output = Result<()>> + Send + 'static,
     {
         self.insert_command(Command::from_handler(handler));
+        self
+    }
+
+    /// Registers a command inside this group with a typed argument schema.
+    pub fn command_with<F, Fut>(mut self, handler: F, spec: CommandSpec) -> Self
+    where
+        F: Fn(Context) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Result<()>> + Send + 'static,
+    {
+        self.insert_command(Command::from_handler(handler).spec(spec));
         self
     }
 
@@ -572,6 +684,14 @@ impl CommandGroup {
     }
 
     fn insert_command(&mut self, command: Command) {
+        if let Some(error) = command.spec.validation_error() {
+            self.registration_errors.push(format!(
+                "command '{}': invalid argument schema: {error}",
+                command.name
+            ));
+            return;
+        }
+
         if self.command_name_taken(&command.name)
             || command
                 .aliases
@@ -602,15 +722,13 @@ impl CommandGroup {
         }
     }
 
-    fn handler_for(&self, command: &str) -> Result<CommandHandler> {
-        self.find_command(command)
-            .map(|entry| Arc::clone(&entry.handler))
-            .ok_or_else(|| {
-                Error::invalid_input(format!(
-                    "unknown command '{command}' in group '{}'",
-                    self.name
-                ))
-            })
+    fn command_for(&self, command: &str) -> Result<&Command> {
+        self.find_command(command).ok_or_else(|| {
+            Error::invalid_input(format!(
+                "unknown command '{command}' in group '{}'",
+                self.name
+            ))
+        })
     }
 
     fn find_command(&self, name: &str) -> Option<&Command> {
@@ -626,6 +744,7 @@ impl CommandGroup {
 pub struct AppTest {
     app: App,
     args: Vec<String>,
+    env: Option<EnvMap>,
 }
 
 impl AppTest {
@@ -639,15 +758,21 @@ impl AppTest {
         self
     }
 
+    /// Sets owned environment values visible to `ctx.env` and schema env bindings.
+    pub fn env(mut self, env: EnvMap) -> Self {
+        self.env = Some(env);
+        self
+    }
+
     /// Runs the selected command in memory.
     pub async fn run(self) -> TestResult {
         crate::config::load_env();
-        self.app.run_test_tokens(self.args).await
+        self.app.run_test_tokens(self.args, self.env).await
     }
 }
 
 impl App {
-    async fn run_test_tokens(&self, tokens: Vec<String>) -> TestResult {
+    async fn run_test_tokens(&self, tokens: Vec<String>, env: Option<EnvMap>) -> TestResult {
         let selection = self.select(&tokens);
         let stdout = Arc::new(Mutex::new(String::new()));
         let stderr = Arc::new(Mutex::new(String::new()));
@@ -675,17 +800,35 @@ impl App {
             return TestResult::failure(stdout, stderr, error);
         }
 
+        let command =
+            match self.command_for(selection.group.as_deref(), selection.command.as_deref()) {
+                Ok(command) => command,
+                Err(error) => return TestResult::failure(stdout, stderr, error),
+            };
+
+        let env_for_args = env.clone();
+        let args = match Args::parse_with_spec(&selection.args, &command.spec, |key| {
+            env_for_args
+                .as_ref()
+                .and_then(|env| env.get_string(key))
+                .or_else(|| std::env::var(key).ok())
+        }) {
+            Ok(args) => args,
+            Err(error) => return TestResult::failure(stdout, stderr, error),
+        };
+
         let config = match self.load_config() {
             Ok(config) => config,
             Err(error) => return TestResult::failure(stdout, stderr, error),
         };
 
         let ctx = Context::memory(
-            selection.args,
+            args,
             self.state.clone(),
             config,
             stdout.clone(),
             stderr.clone(),
+            env,
         );
 
         if let Err(error) = self.lifecycle.run_start(ctx.clone()).await {
@@ -695,12 +838,7 @@ impl App {
             return TestResult::failure(stdout, stderr, error);
         }
 
-        let handler =
-            match self.handler_for(selection.group.as_deref(), selection.command.as_deref()) {
-                Ok(handler) => handler,
-                Err(error) => return TestResult::failure(stdout, stderr, error),
-            };
-
+        let handler = Arc::clone(&command.handler);
         let command_result = match handler(ctx.clone()).await {
             Ok(()) => ctx.join_all().await,
             Err(error) => Err(error),
@@ -790,6 +928,11 @@ impl TestResult {
         );
     }
 
+    /// Asserts stdout equals text exactly.
+    pub fn assert_stdout_eq(&self, expected: &str) {
+        assert_eq!(self.stdout, expected, "stdout mismatch");
+    }
+
     /// Asserts stderr contains text.
     pub fn assert_stderr_contains(&self, expected: &str) {
         assert!(
@@ -798,11 +941,26 @@ impl TestResult {
             self.stderr
         );
     }
+
+    /// Asserts stderr equals text exactly.
+    pub fn assert_stderr_eq(&self, expected: &str) {
+        assert_eq!(self.stderr, expected, "stderr mismatch");
+    }
+
+    /// Asserts the captured error contains text.
+    pub fn assert_error_contains(&self, expected: &str) {
+        let error = self.error.as_deref().unwrap_or("");
+        assert!(
+            error.contains(expected),
+            "expected error to contain {expected:?}, got {error:?}"
+        );
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ArgSpec;
 
     async fn hello(ctx: Context) -> Result<()> {
         let name = ctx.arg_or("name", "world");
@@ -822,6 +980,16 @@ mod tests {
 
     async fn status(ctx: Context) -> Result<()> {
         ctx.println("status ok");
+        Ok(())
+    }
+
+    async fn scan(ctx: Context) -> Result<()> {
+        ctx.println(format!(
+            "scan path={} recursive={} limit={}",
+            ctx.arg("path")?,
+            ctx.flag("recursive"),
+            ctx.arg("limit")?
+        ));
         Ok(())
     }
 
@@ -978,6 +1146,47 @@ mod tests {
         res.assert_stdout_contains("src");
         res.assert_stdout_contains("input.txt");
         res.assert_stdout_contains("true");
+    }
+
+    #[tokio::test]
+    async fn command_schema_validates_defaults_env_and_short_flags() {
+        let spec = CommandSpec::new()
+            .arg(ArgSpec::option("path").short('p').required())
+            .arg(ArgSpec::flag("recursive").short('r'))
+            .arg(ArgSpec::option("limit").env("SCAN_LIMIT").default("10"));
+
+        let res = App::new()
+            .command_with(scan, spec)
+            .test()
+            .env(EnvMap::new().set("SCAN_LIMIT", "25"))
+            .args(["scan", "-r", "-p", "src"])
+            .run()
+            .await;
+
+        res.assert_success();
+        res.assert_stdout_contains("scan path=src recursive=true limit=25");
+    }
+
+    #[tokio::test]
+    async fn command_schema_help_lists_flags() {
+        let spec = CommandSpec::new().arg(
+            ArgSpec::option("path")
+                .short('p')
+                .required()
+                .help("Path to scan"),
+        );
+
+        let res = App::new()
+            .name("demo")
+            .command_with(scan, spec)
+            .test()
+            .args(["scan", "--help"])
+            .run()
+            .await;
+
+        res.assert_success();
+        res.assert_stdout_contains("Usage: demo scan [OPTIONS]");
+        res.assert_stdout_contains("-p, --path <PATH> - Path to scan [required]");
     }
 
     #[tokio::test]

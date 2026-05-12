@@ -85,6 +85,11 @@ impl TaskGroup {
         }
     }
 
+    /// Creates a fail-fast task group similar to Go's `errgroup.WithContext`.
+    pub fn err_group() -> Self {
+        Self::new().cancel_on_error(true)
+    }
+
     /// Creates an empty task group using an existing cancellation handle.
     pub fn with_cancellation(cancellation: Cancellation) -> Self {
         Self {
@@ -135,6 +140,24 @@ impl TaskGroup {
         });
 
         self.tasks.lock().expect("task list poisoned").push(handle);
+    }
+
+    /// Spawns a task that receives this group's cancellation handle.
+    pub fn spawn_with_cancel<F, Fut>(&self, task: F)
+    where
+        F: FnOnce(Cancellation) -> Fut + Send + 'static,
+        Fut: Future<Output = Result<()>> + Send + 'static,
+    {
+        self.spawn_named("task", task(self.cancellation.clone()));
+    }
+
+    /// Spawns a named task that receives this group's cancellation handle.
+    pub fn spawn_named_with_cancel<F, Fut>(&self, name: impl Into<String>, task: F)
+    where
+        F: FnOnce(Cancellation) -> Fut + Send + 'static,
+        Fut: Future<Output = Result<()>> + Send + 'static,
+    {
+        self.spawn_named(name, task(self.cancellation.clone()));
     }
 
     /// Joins all currently tracked tasks and returns the first error.
@@ -255,5 +278,20 @@ mod tests {
         group.spawn_named("bad", async { Err(Error::msg("failed")) });
         assert!(group.join().await.is_err());
         assert!(cancellation.is_cancelled());
+    }
+
+    #[tokio::test]
+    async fn err_group_spawns_with_cancellation() {
+        let group = TaskGroup::err_group();
+        let cancellation = group.cancellation();
+
+        group.spawn_named_with_cancel("worker", |cancellation| async move {
+            cancellation.cancelled().await;
+            Err(Error::cancelled("worker stopped"))
+        });
+        cancellation.cancel();
+
+        let error = group.join().await.expect_err("cancelled");
+        assert_eq!(error.to_string(), "cancelled: worker stopped");
     }
 }

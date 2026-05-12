@@ -56,12 +56,12 @@ fn main_rs(name: &str) -> String {
 mod config;
 mod state;
 
-use ezrs::{App, Result};
+use ezrs::App;
 
 use crate::{config::Config, state::State};
 
 #[ezrs::main]
-async fn main() -> Result<()> {
+async fn main() {
     App::new()
         .name("__EZRS_NAME__")
         .version("0.1.0")
@@ -69,7 +69,7 @@ async fn main() -> Result<()> {
         .config::<Config>()
         .state(State::new("__EZRS_NAME__"))
         .command(commands::hello::run)
-        .run()
+        .run_and_exit()
         .await
 }
 "#

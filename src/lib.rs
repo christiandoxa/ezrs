@@ -25,8 +25,11 @@ pub mod typed_args;
 mod worker;
 
 pub use app::{App, AppTest, CommandGroup, TestResult};
-pub use args::Args;
+pub use args::{ArgKind, ArgSpec, Args, CommandSpec};
 pub use channel::{Receiver, Select2, Sender, channel, recv_or_cancel, select_recv2};
+pub use config::{
+    ConfigSource, load_from_source, load_optional, load_optional_from_path, load_validated,
+};
 pub use context::Context;
 pub use diagnostic::{Check, CheckStatus, DiagnosticReport, DiagnosticRunner};
 pub use error::{Error, Result};
@@ -34,10 +37,14 @@ pub use fs::{FileLock, Fs};
 pub use lifecycle::{Lifecycle, LifecycleHook};
 pub use process::{Process, ProcessOutput, ProcessStatus};
 pub use report::{Report, Table};
-pub use resilience::{RetryPolicy, backoff_delay, retry, timeout};
+pub use resilience::{RetryPolicy, backoff_delay, retry, retry_with_cancellation, timeout};
 pub use secret::SecretString;
 pub use shared::{Shared, SharedMut};
 pub use task::{Cancellation, TaskGroup};
+pub use test_support::{
+    EnvMap, FakeClock, FakeCommandOutput, FakeCommandRequest, FakeProcessRunner, Fixture,
+    TempWorkspace, TestEnv, assert_golden,
+};
 pub use tokio::{main, test};
 pub use typed_args::{ArgSource, FromArgs, TypedArgs};
 pub use worker::{WorkerPool, worker_pool};

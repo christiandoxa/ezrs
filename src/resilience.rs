@@ -2,7 +2,7 @@
 
 use std::{future::Future, time::Duration};
 
-use crate::{Error, Result};
+use crate::{Cancellation, Error, Result};
 
 /// Retry settings for fallible async operations.
 #[derive(Clone, Debug)]
@@ -95,6 +95,38 @@ where
     }
 }
 
+/// Retries an async operation until success, cancellation, or exhausted attempts.
+pub async fn retry_with_cancellation<T, F, Fut>(
+    cancellation: &Cancellation,
+    policy: RetryPolicy,
+    mut operation: F,
+) -> Result<T>
+where
+    F: FnMut(usize) -> Fut,
+    Fut: Future<Output = Result<T>>,
+{
+    let max_attempts = policy.max_attempts.max(1);
+    let mut attempt = 1;
+
+    loop {
+        cancellation.check_cancelled()?;
+        match operation(attempt).await {
+            Ok(value) => return Ok(value),
+            Err(error) if attempt >= max_attempts => return Err(error),
+            Err(_) => {
+                let delay = policy.delay_after(attempt);
+                tokio::select! {
+                    () = cancellation.cancelled() => {
+                        return Err(Error::cancelled("retry cancelled"));
+                    }
+                    () = tokio::time::sleep(delay) => {}
+                }
+                attempt += 1;
+            }
+        }
+    }
+}
+
 /// Fails an async operation when it does not complete before `duration`.
 pub async fn timeout<T, F>(duration: Duration, future: F) -> Result<T>
 where
@@ -162,5 +194,20 @@ mod tests {
         .await;
 
         assert!(matches!(result, Err(Error::Timeout(_))));
+    }
+
+    #[tokio::test]
+    async fn retry_stops_on_cancellation() {
+        let cancellation = Cancellation::new();
+        cancellation.cancel();
+
+        let result = retry_with_cancellation(
+            &cancellation,
+            RetryPolicy::fixed(3, Duration::ZERO),
+            |_| async { Ok::<_, Error>("never") },
+        )
+        .await;
+
+        assert!(matches!(result, Err(Error::Cancelled(_))));
     }
 }

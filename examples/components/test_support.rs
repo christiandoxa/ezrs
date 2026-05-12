@@ -1,14 +1,13 @@
 //! Test support helpers for Go-style table tests and fake dependencies.
 //!
-//! This example requires the `ezrs::test_support` module to be exported by the
-//! crate facade.
-
 #[cfg(test)]
 use ezrs::Result;
 #[cfg(test)]
 use ezrs::test_support::{
-    EnvMap, FakeCommandOutput, FakeCommandRequest, FakeProcessRunner, TempWorkspace,
+    EnvMap, FakeClock, FakeCommandOutput, FakeCommandRequest, FakeProcessRunner, TempWorkspace,
 };
+#[cfg(test)]
+use std::time::{Duration, SystemTime};
 
 #[cfg(test)]
 #[derive(Clone)]
@@ -95,6 +94,20 @@ fn temp_workspace_is_removed_on_drop() {
     }
 
     assert!(!path.exists());
+}
+
+#[cfg(test)]
+#[test]
+fn fake_clock_advances_without_sleeping() {
+    let clock = FakeClock::epoch();
+    clock.advance(Duration::from_secs(10));
+    assert_eq!(
+        clock
+            .now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .expect("duration"),
+        Duration::from_secs(10)
+    );
 }
 
 #[cfg(not(test))]

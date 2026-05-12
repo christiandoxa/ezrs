@@ -1,6 +1,6 @@
 use std::{any::type_name, future::Future, pin::Pin, sync::Arc};
 
-use crate::{Context, Result};
+use crate::{CommandSpec, Context, Result};
 
 pub(crate) type CommandFuture = Pin<Box<dyn Future<Output = Result<()>> + Send + 'static>>;
 pub(crate) type CommandHandler = Arc<dyn Fn(Context) -> CommandFuture + Send + Sync + 'static>;
@@ -12,6 +12,7 @@ pub(crate) struct Command {
     pub(crate) aliases: Vec<String>,
     pub(crate) hidden: bool,
     pub(crate) about: Option<String>,
+    pub(crate) spec: CommandSpec,
 }
 
 impl Command {
@@ -34,6 +35,7 @@ impl Command {
             aliases: Vec::new(),
             hidden: false,
             about: None,
+            spec: CommandSpec::new(),
         }
     }
 
@@ -49,6 +51,11 @@ impl Command {
 
     pub(crate) fn about(mut self, about: impl Into<String>) -> Self {
         self.about = Some(about.into());
+        self
+    }
+
+    pub(crate) fn spec(mut self, spec: CommandSpec) -> Self {
+        self.spec = spec;
         self
     }
 }

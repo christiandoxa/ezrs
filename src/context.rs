@@ -15,6 +15,7 @@ use crate::{
     process::Process,
     state::TypeStore,
     task::{Cancellation, TaskGroup, TaskManager},
+    test_support::EnvMap,
 };
 
 #[derive(Clone)]
@@ -74,6 +75,7 @@ struct ContextInner {
     tasks: TaskManager,
     cancellation: Cancellation,
     output: Output,
+    env: Option<EnvMap>,
 }
 
 /// App capability handle passed to every command.
@@ -84,7 +86,7 @@ pub struct Context {
 
 impl Context {
     pub(crate) fn runtime(args: Args, state: TypeStore, config: TypeStore) -> Self {
-        Self::new(args, state, config, Output::process())
+        Self::new(args, state, config, Output::process(), None)
     }
 
     pub(crate) fn memory(
@@ -93,11 +95,18 @@ impl Context {
         config: TypeStore,
         stdout: Arc<Mutex<String>>,
         stderr: Arc<Mutex<String>>,
+        env: Option<EnvMap>,
     ) -> Self {
-        Self::new(args, state, config, Output::memory(stdout, stderr))
+        Self::new(args, state, config, Output::memory(stdout, stderr), env)
     }
 
-    fn new(args: Args, state: TypeStore, config: TypeStore, output: Output) -> Self {
+    fn new(
+        args: Args,
+        state: TypeStore,
+        config: TypeStore,
+        output: Output,
+        env: Option<EnvMap>,
+    ) -> Self {
         Self {
             inner: Arc::new(ContextInner {
                 args,
@@ -108,6 +117,7 @@ impl Context {
                 tasks: TaskManager::new(),
                 cancellation: Cancellation::new(),
                 output,
+                env,
             }),
         }
     }
@@ -127,6 +137,7 @@ impl Context {
                 tasks: TaskManager::new(),
                 cancellation,
                 output: self.inner.output.clone(),
+                env: self.inner.env.clone(),
             }),
         }
     }
@@ -156,6 +167,11 @@ impl Context {
 
     /// Reads an environment variable.
     pub fn env(&self, key: &str) -> Result<String> {
+        if let Some(env) = &self.inner.env
+            && let Some(value) = env.get_string(key)
+        {
+            return Ok(value);
+        }
         Ok(std::env::var(key)?)
     }
 
@@ -253,6 +269,8 @@ impl Context {
     /// Creates a child process builder.
     pub fn process(&self, program: impl Into<String>) -> Process {
         Process::new(program)
+            .with_cancellation(self.inner.cancellation.clone())
+            .kill_on_drop()
     }
 
     /// Spawns a background task.
@@ -279,6 +297,11 @@ impl Context {
         TaskGroup::with_cancellation(self.inner.cancellation.clone())
     }
 
+    /// Creates a fail-fast task group that shares this Context's cancellation handle.
+    pub fn err_group(&self) -> TaskGroup {
+        TaskGroup::with_cancellation(self.inner.cancellation.clone()).cancel_on_error(true)
+    }
+
     /// Joins all tasks spawned through this Context.
     pub async fn join_all(&self) -> Result<()> {
         self.inner.tasks.join_all().await
@@ -301,6 +324,7 @@ mod tests {
             TypeStore::default(),
             Arc::new(Mutex::new(String::new())),
             Arc::new(Mutex::new(String::new())),
+            None,
         )
     }
 

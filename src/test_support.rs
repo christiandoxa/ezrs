@@ -12,6 +12,7 @@ use std::{
         Arc, Mutex,
         atomic::{AtomicU64, Ordering},
     },
+    time::{Duration, SystemTime},
 };
 
 use crate::{Error, Result};
@@ -74,6 +75,37 @@ impl EnvMap {
 pub struct TestEnv {
     name: String,
     vars: EnvMap,
+}
+
+/// Deterministic clock for tests that should not wait on real time.
+#[derive(Debug, Clone)]
+pub struct FakeClock {
+    now: Arc<Mutex<SystemTime>>,
+}
+
+impl FakeClock {
+    /// Creates a fake clock at a fixed instant.
+    pub fn new(now: SystemTime) -> Self {
+        Self {
+            now: Arc::new(Mutex::new(now)),
+        }
+    }
+
+    /// Creates a fake clock at `UNIX_EPOCH`.
+    pub fn epoch() -> Self {
+        Self::new(SystemTime::UNIX_EPOCH)
+    }
+
+    /// Returns the current fake time.
+    pub fn now(&self) -> SystemTime {
+        *self.now.lock().expect("fake clock mutex")
+    }
+
+    /// Advances the fake time.
+    pub fn advance(&self, duration: Duration) {
+        let mut now = self.now.lock().expect("fake clock mutex");
+        *now += duration;
+    }
 }
 
 impl TestEnv {
@@ -505,5 +537,18 @@ mod tests {
         assert_eq!(request.program, "cargo");
         assert_eq!(request.args, ["check", "--workspace"]);
         assert_eq!(request.env.get_string("RUST_LOG").as_deref(), Some("debug"));
+    }
+
+    #[test]
+    fn fake_clock_advances_without_sleeping() {
+        let clock = FakeClock::epoch();
+        clock.advance(Duration::from_secs(5));
+        assert_eq!(
+            clock
+                .now()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .expect("duration"),
+            Duration::from_secs(5)
+        );
     }
 }

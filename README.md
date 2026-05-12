@@ -26,6 +26,10 @@ CLI users install the `ezrs` binary:
 cargo install ezrs
 ```
 
+`ezrs check` runs the same local quality gates as CI: `fmt`, `check`, `test`,
+`clippy -D warnings`, and compilation of all examples. Failed command output is
+stored in `.ezrs/last-error.txt` for `ezrs explain --last-error`.
+
 ## CI And Release
 
 The repository uses GitHub Actions for `cargo fmt --all --check`, `cargo check --workspace --all-targets`, `cargo test --workspace --all-targets`, `cargo clippy --workspace --all-targets -- -D warnings`, and example compilation.
@@ -68,6 +72,9 @@ cargo run -- hello
 `App::command(hello)` derives the CLI command name from Rust syntax. A handler
 named `hello` becomes `hello`, and `commands::scan::run` becomes `scan`.
 
+Use `run_and_exit().await` in binaries that should terminate with
+`ezrs::Error::exit_code()` instead of returning a generic Rust `Result` exit.
+
 ## CLI Example
 
 ```rust
@@ -98,6 +105,20 @@ impl ezrs::TypedArgs for ScanArgs {
 ```sh
 cargo run -- scan --path src --recursive
 ```
+
+For cobra/pflag-style commands, attach a schema to the Rust handler:
+
+```rust
+let spec = ezrs::CommandSpec::new()
+    .arg(ezrs::ArgSpec::option("path").short('p').required())
+    .arg(ezrs::ArgSpec::flag("recursive").short('r'))
+    .arg(ezrs::ArgSpec::option("limit").default("100").env("SCAN_LIMIT"));
+
+ezrs::App::new().command_with(scan, spec).run().await
+```
+
+The schema drives short flags, defaults, env fallback, validation, and
+command-specific help.
 
 ## Worker Example
 
@@ -175,13 +196,17 @@ async fn run(ctx: ezrs::Context) -> ezrs::Result<()> {
 }
 ```
 
-`App::config::<Config>()` loads `ezrs.toml` when present. `.env` is loaded for environment access through `ctx.env("KEY")`.
+`App::config::<Config>()` loads `ezrs.toml` when present. Use
+`ConfigSource::ezrs().env_prefix("APP").required()` with `App::config_from` or
+`App::config_validated` for layered file/env config. `.env` is loaded for
+environment access through `ctx.env("KEY")`.
 
 ## Logging Example
 
 ```rust
 async fn run(ctx: ezrs::Context) -> ezrs::Result<()> {
     ctx.log().info("started");
+    ctx.log().info_fields("worker ready", [("worker", "scan")]);
     ctx.log().warn("skipped optional file");
     ctx.log().error("failed example");
     Ok(())
@@ -220,7 +245,28 @@ async fn version(ctx: ezrs::Context) -> ezrs::Result<()> {
 ```
 
 This maps to Go's `exec.CommandContext`: explicit child process setup, timeout,
-captured output, and status propagation.
+captured output, status propagation, and Context cancellation. Use
+`Process::new("program")` for low-level detached process setup.
+
+## ErrGroup Example
+
+```rust
+async fn run(ctx: ezrs::Context) -> ezrs::Result<()> {
+    let group = ctx.err_group();
+
+    for item in ["a", "b", "c"] {
+        group.spawn_named_with_cancel(item, move |cancellation| async move {
+            cancellation.check_cancelled()?;
+            println!("processed {item}");
+            Ok(())
+        });
+    }
+
+    group.join().await
+}
+```
+
+This is the ezrs equivalent of Go's `errgroup.WithContext`.
 
 ## Persistence Example
 
@@ -249,6 +295,9 @@ async fn hello_works() {
 ## Component Guide
 
 Complete component examples live in `examples/components/`.
+
+Go-focused migration notes live in `docs/go-dev-migration.md` and
+`docs/golang-patterns.md`.
 
 ### App: building and running applications
 

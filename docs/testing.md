@@ -15,6 +15,9 @@ assert_eq!(env.get_string("PORT").as_deref(), Some("8080"));
 
 Use `EnvMap::capture_current()` only when a test needs a snapshot of the real shell environment. After capture, pass the map as owned data.
 
+`App::test().env(env)` injects those values into `ctx.env(...)` and command
+schema env fallbacks without mutating process-global environment.
+
 ## Temp Workspaces
 
 `TempWorkspace` is a std-only RAII temporary directory. It creates a unique directory below `std::env::temp_dir()` and removes it on drop.
@@ -70,7 +73,24 @@ assert_eq!(runner.last_request().unwrap().program, "cargo");
 # Ok::<(), ezrs::Error>(())
 ```
 
-When process integration lands, real process code can convert fake requests into `crate::process` builders and fake output into process-compatible output types.
+Use `ctx.process(...)` in integration tests when you want real cancellation-aware
+child process behavior. Use `FakeProcessRunner` in unit tests for service logic.
+
+## Fake Clock
+
+Use `FakeClock` for code that should test time decisions without sleeping.
+
+```rust
+use std::time::{Duration, SystemTime};
+use ezrs::test_support::FakeClock;
+
+let clock = FakeClock::epoch();
+clock.advance(Duration::from_secs(5));
+assert_eq!(
+    clock.now().duration_since(SystemTime::UNIX_EPOCH).unwrap(),
+    Duration::from_secs(5)
+);
+```
 
 ## Table-Driven Tests
 

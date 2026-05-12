@@ -243,7 +243,19 @@ All code, comments, docs, examples, commit-style notes, and CLI text must be wri
 
 This repository publishes one crate: ezrs.
 
-The crate contains the public library and the `ezrs` CLI binary.
+The repository root is the crate root. Do not use a `crates/` workspace layout
+unless publishing multiple crates is intentionally restored.
+
+The root `src/` tree contains the public library and the `ezrs` CLI binary.
+
+Use this layout:
+
+- `src/lib.rs` owns the public facade.
+- `src/*.rs` own focused internal library modules.
+- `src/bin/ezrs.rs` owns the ezrs command line entrypoint.
+- `src/bin/commands/` owns ezrs CLI subcommands.
+- `tests/` owns integration tests.
+- `examples/` owns component, Go pattern, and Go Tour examples.
 
 Keep internal modules focused:
 
@@ -254,7 +266,10 @@ Keep internal modules focused:
 - log owns default logging.
 - fs owns file helpers.
 - task owns task spawning and cancellation.
-- bin/ezrs owns the ezrs command line tool.
+- process owns child process helpers.
+- resilience owns retry, backoff, timeout, and cancellation-aware retry.
+- test_support owns app/service test helpers.
+- `src/bin/ezrs.rs` owns the ezrs command line tool.
 
 Do not leak internal module complexity into beginner examples.
 

@@ -24,7 +24,7 @@ Use `examples/golang_patterns/` for pattern-focused examples. Use `examples/comp
 | 14 | Wrapping error | `Error::msg(format!("load config: {err}"))` | direct API |
 | 15 | `defer` cleanup | RAII and `Drop` | `examples/golang_patterns/cleanup_raii.rs` |
 | 16 | Goroutine | `ctx.spawn(async move { ... })` | `examples/golang_patterns/tasks_goroutines.rs` |
-| 17 | Worker pool | `WorkerPool::new(worker).workers(n).run(jobs)` | `examples/components/worker_pool.rs` |
+| 17 | Worker pool / errgroup | `WorkerPool::new(worker).workers(n).run(jobs)` and `ctx.err_group()` | `examples/components/worker_pool.rs`, `examples/golang_patterns/errgroup_context.rs` |
 | 18 | Channel communication | `ezrs::channel` or `tokio::sync::mpsc` | `examples/components/channels.rs` |
 | 19 | Buffered channel | `mpsc::channel(capacity)` | documented Rust pattern |
 | 20 | Channel close | drop all senders | documented Rust pattern |
@@ -42,8 +42,8 @@ Use `examples/golang_patterns/` for pattern-focused examples. Use `examples/comp
 | 32 | Rate limiting | interval or `tokio::sync::Semaphore` | documented Rust pattern |
 | 33 | Retry with backoff | `RetryPolicy` plus `retry(...)` | `examples/components/resilience.rs` |
 | 34 | CLI command | `App::command(scan)` with command names derived from Rust handler syntax | direct API |
-| 35 | Flags | `TypedArgs` or dynamic `ctx.arg_or`/`ctx.flag` | `examples/components/typed_args.rs` |
-| 36 | Config struct | `serde::Deserialize` plus `App::config::<T>()` | direct API |
+| 35 | Flags | `CommandSpec`/`ArgSpec`, `TypedArgs`, or dynamic `ctx.arg_or`/`ctx.flag` | `examples/golang_patterns/cobra_style_cli.rs`, `examples/components/typed_args.rs` |
+| 36 | Config struct | `serde::Deserialize` plus `App::config::<T>()`, `config_from`, or `config_validated` | direct API |
 | 37 | Environment config | `ctx.env("PORT")?` | direct API |
 | 38 | Logging | `ctx.log().info(...)` | `examples/components/logger.rs` |
 | 39 | Table-driven tests | Rust case structs and loops plus `test_support` helpers | `examples/golang_patterns/table_driven_tests.rs` |
@@ -62,7 +62,7 @@ Use `examples/golang_patterns/` for pattern-focused examples. Use `examples/comp
 | 52 | Module/dependency | Cargo.toml and Cargo.lock | documented Rust pattern |
 | 53 | Simple binary scaffold | `ezrs new myapp` | CLI |
 | 54 | Add command | `ezrs add command scan` | CLI |
-| 55 | Explain compiler error | `ezrs explain --last-error` fixed advice | CLI |
+| 55 | Explain compiler error | `ezrs explain --last-error` using `.ezrs/last-error.txt` from `ezrs check` | CLI |
 
 ## Prodex-Class Building Blocks Without Domain Coupling
 
@@ -70,6 +70,8 @@ ezrs includes reusable app-infrastructure blocks for larger local automation
 apps without importing any application-specific source code or terminology.
 
 - Go `exec.CommandContext` maps to `ctx.process("program")` or `Process::new("program")` with args, env overlays, stdin, capture, timeout, and status helpers.
+- Go `errgroup.WithContext` maps to `ctx.err_group()` or `TaskGroup::err_group()`.
+- Go cobra/pflag command schemas map to `CommandSpec` and `ArgSpec` for validation, defaults, env fallback, short flags, and help.
 - Go temp-file rename persistence maps to `ctx.fs().atomic_write_string(...)`.
 - Go lock-file style coordination maps to `ctx.fs().try_lock(...)` and RAII drop cleanup.
 - Go JSON/TOML state file patterns map to `ctx.fs().read_json`, `write_json`, `read_toml`, and `write_toml`.
